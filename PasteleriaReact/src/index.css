@@ -1,0 +1,25 @@
+/* Reset / estilos base mínimos para que no interfieran con Bootstrap
+   Se movió la configuración visual (colores/fuentes) a `src/styles/globals.css`.
+*/
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  /* No usar display:flex ni centrado global aquí para que Bootstrap y nuestro Layout funcionen correctamente */
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+}
+
+/* Enlaces y botones usen estilos por defecto de Bootstrap; personalizaciones están en globals.css */
+a { text-decoration: none; }
+
+/* Tipografía básica */
+h1 { font-size: 2rem; }
+
+button { cursor: pointer; }

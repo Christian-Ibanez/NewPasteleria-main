@@ -1,0 +1,88 @@
+/* Importar fuentes de Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700&family=Pacifico&display=swap');
+
+:root {
+  /* Colores principales */
+  --color-background: #FFF5E1;    /* Crema Pastel */
+  --color-accent-1: #FFC0CB;      /* Rosa Suave */
+  --color-accent-2: #8B4513;      /* Chocolate */
+  --color-text-primary: #5D4037;  /* Marrón Oscuro */
+  --color-text-secondary: #B0BEC5; /* Gris Claro */
+}
+
+body {
+  font-family: 'Lato', sans-serif;
+  background-color: var(--color-background);
+  color: var(--color-text-primary);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Pacifico', cursive;
+  color: var(--color-text-primary);
+}
+
+/* Estilos para botones */
+.btn-primary {
+  background-color: var(--color-accent-1);
+  border-color: var(--color-accent-1);
+  color: var(--color-text-primary);
+}
+
+.btn-primary:hover {
+  background-color: var(--color-accent-2);
+  border-color: var(--color-accent-2);
+  color: white;
+}
+
+.btn-secondary {
+  background-color: var(--color-accent-2);
+  border-color: var(--color-accent-2);
+  color: white;
+}
+
+/* Estilos para cards */
+.card {
+  background-color: white;
+  border: none;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* Estilos para texto secundario */
+.text-secondary {
+  color: var(--color-text-secondary) !important;
+}
+
+/* Animaciones suaves */
+.btn, .card {
+  transition: all 0.3s ease;
+}
+
+/* Hover effects */
+.card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Estilos para secciones especiales */
+.historia-section {
+  background-color: white;
+  padding: 2rem;
+  border-radius: 10px;
+  margin: 2rem 0;
+}
+
+.impacto-comunitario {
+  background-color: var(--color-accent-1);
+  color: var(--color-text-primary);
+  padding: 2rem;
+  border-radius: 10px;
+  margin: 2rem 0;
+}
+
+/* Estilos para recomendaciones */
+.recomendaciones {
+  background: linear-gradient(to right, var(--color-background), white);
+  padding: 2rem;
+  border-radius: 10px;
+  margin: 2rem 0;
+}
