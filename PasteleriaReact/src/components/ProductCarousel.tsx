@@ -8,6 +8,15 @@ const ProductCarousel: React.FC = () => {
   const { products } = useProducts();
   const productos: Producto[] = products.slice(0, 8);
 
+  // Helper para resolver la ruta de la imagen
+  const resolveImageSrc = (imagen?: string, codigo?: string) => {
+    if (!imagen && !codigo) return '/images/productos/placeholder.jpg';
+    if (imagen?.startsWith('data:')) return imagen; // Si es base64
+    if (imagen?.startsWith('http') || imagen?.startsWith('/')) return imagen; // Si es URL o ruta absoluta
+    const filename = (imagen || codigo || 'placeholder.jpg').toLowerCase();
+    return `/images/productos/${filename}`;
+  };
+
   useEffect(() => {
     const timer = setInterval(() => {
       setActiveIndex((current) => (current + 1) % (productos.length - 3));
@@ -41,7 +50,7 @@ const ProductCarousel: React.FC = () => {
               >
                 <div style={{ height: '200px', overflow: 'hidden' }}>
                   <img
-                    src={`/images/productos/${(producto.imagen ?? producto.codigo).toLowerCase()}`}
+                    src={resolveImageSrc(producto.imagen, producto.codigo)}
                     className="card-img-top"
                     alt={producto.nombre}
                     style={{
