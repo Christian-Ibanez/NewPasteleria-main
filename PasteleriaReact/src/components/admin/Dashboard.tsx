@@ -374,7 +374,7 @@ const Dashboard: React.FC = () => {
                       </thead>
                       <tbody>
                         {products.map(pr => (
-                          <ProductRow key={pr.id} pr={pr} onDelete={() => setConfirm({ type: 'product-delete', productId: pr.id, message: `¿Eliminar el producto ${pr.nombre}?` })} onSave={(patch)=>updateProduct(pr.id, patch)} />
+                          <ProductRow key={pr.id} pr={pr} onDelete={() => setConfirm({ type: 'product-delete', productId: pr.id, message: `¿Eliminar el producto ${pr.nombre}?` })} onSave={(patch)=>updateProduct(pr.id, patch)} setMessage={setMessage} />
                         ))}
                       </tbody>
                     </table>
@@ -438,7 +438,7 @@ const Dashboard: React.FC = () => {
 export default Dashboard;
 
 // --- Row component for inline editing ---
-const ProductRow: React.FC<{ pr: Producto; onDelete: ()=>void; onSave: (patch: Partial<Producto>)=>void }>=({ pr, onDelete, onSave })=>{
+const ProductRow: React.FC<{ pr: Producto; onDelete: ()=>void; onSave: (patch: Partial<Producto>)=>void; setMessage: (msg: string) => void }> = ({ pr, onDelete, onSave, setMessage }) => {
   const [editing, setEditing] = useState(false);
   const [precio, setPrecio] = useState<number>(pr.precio);
   const [stock, setStock] = useState<number>(pr.stock);
@@ -460,22 +460,48 @@ const ProductRow: React.FC<{ pr: Producto; onDelete: ()=>void; onSave: (patch: P
       <td>{pr.nombre}</td>
       <td>
         {editing ? (
-          <input type="number" className="form-control form-control-sm" value={precio} onChange={e=>setPrecio(Number(e.target.value))} style={{maxWidth:120}} />
+          <input
+            type="number"
+            className="form-control form-control-sm"
+            value={precio}
+            onChange={e => setPrecio(Number(e.target.value))}
+            style={{ maxWidth: 120 }}
+            min={0.01} // Validación para que el precio sea mayor a 0
+          />
         ) : (
           `$${pr.precio.toLocaleString('es-CL')}`
         )}
       </td>
       <td>
         {editing ? (
-          <input type="number" className="form-control form-control-sm" value={stock} onChange={e=>setStock(Number(e.target.value))} style={{maxWidth:100}} />
+          <input
+            type="number"
+            className="form-control form-control-sm"
+            value={stock}
+            onChange={e => setStock(Number(e.target.value))}
+            style={{ maxWidth: 100 }}
+          />
         ) : (
           pr.stock
         )}
       </td>
       <td className="d-flex gap-2">
-        <button className="btn btn-sm btn-outline-secondary" onClick={()=>setEditing(v=>!v)}>{editing?'Cancelar':'Editar'}</button>
+        <button className="btn btn-sm btn-outline-secondary" onClick={() => setEditing(v => !v)}>{editing ? 'Cancelar' : 'Editar'}</button>
         {editing && (
-          <button className="btn btn-sm btn-primary" onClick={()=>{ onSave({ precio, stock }); setEditing(false); }}>Guardar</button>
+          <button
+            className="btn btn-sm btn-primary"
+            onClick={() => {
+              if (precio <= 0) {
+                setMessage('El precio debe ser mayor a 0');
+                setTimeout(() => setMessage(''), 3000);
+                return;
+              }
+              onSave({ precio, stock });
+              setEditing(false);
+            }}
+          >
+            Guardar
+          </button>
         )}
         {!editing && (
           <button className="btn btn-sm btn-outline-danger" onClick={onDelete}>Eliminar</button>
@@ -483,4 +509,4 @@ const ProductRow: React.FC<{ pr: Producto; onDelete: ()=>void; onSave: (patch: P
       </td>
     </tr>
   );
-}
+};
