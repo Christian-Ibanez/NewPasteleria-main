@@ -61,15 +61,7 @@ const NavBar: React.FC = () => {
                 Nuestra Historia
               </Link>
             </li>
-            <li className="nav-item">
-              <Link 
-                className="nav-link" 
-                to="/promociones" 
-                style={{ color: '#5D4037' }}
-              >
-                Promociones
-              </Link>
-            </li>
+            {/** Link a Promociones eliminado por solicitud del usuario */}
           </ul>
           
           <div className="d-flex align-items-center">

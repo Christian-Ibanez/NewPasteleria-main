@@ -21,7 +21,8 @@ export interface Producto {
   descripcion: string;
   precio: number;
   categoria: string;
-  imagen: string;
+  imagen?: string;
+  esPersonalizable?: boolean;
   stock: number;
 }
 
@@ -44,6 +45,8 @@ export interface Pedido {
 export interface CarritoItem {
   producto: Producto;
   cantidad: number;
+  // Mensaje opcional de personalización para el producto (ej. dedicatoria en tortas)
+  personalizacion?: string;
 }
 
 export interface AuthState {

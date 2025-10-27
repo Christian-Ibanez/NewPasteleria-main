@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { CATALOGO_PRODUCTOS } from '../data/productos';
 import type { Producto } from '../data/productos';
 import { useCart } from '../context/CartContext';
+import { useProducts } from '../context/ProductsContext';
 // Importamos 'Container', 'Row' y 'Col' de react-bootstrap si lo usas, 
 // o simplemente clases de Bootstrap si no. Usaremos clases simples para este ejemplo.
 
@@ -164,7 +164,7 @@ const TarjetaProducto: React.FC<{ producto: Producto }> = ({ producto }) => {
 
 // Componente principal del Catálogo
 const Catalogo: React.FC = () => {
-  const productos = CATALOGO_PRODUCTOS;
+  const { products: productos } = useProducts();
   const [busqueda, setBusqueda] = useState('');
   const [filtros, setFiltros] = useState<string[]>([]);
 

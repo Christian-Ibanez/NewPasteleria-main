@@ -1,12 +1,17 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '../context/UserContext';
+import { REGIONES_COMUNAS } from '../utils/validations';
 
 const Profile: React.FC = () => {
-  const { user, logout, updateUser, addDeliveryAddress, changePassword } = useUser();
+  const { user, logout, addDeliveryAddress, changePassword } = useUser();
   const navigate = useNavigate();
+  const canSeeDashboard = (user?.email?.toLowerCase?.() === 'admin@admin.cl' || user?.email?.toLowerCase?.() === 'system@admin.cl');
   
-  const [newAddress, setNewAddress] = useState('');
+  const [regionInput, setRegionInput] = useState('');
+  const [comunaInput, setComunaInput] = useState('');
+  const [calleInput, setCalleInput] = useState('');
+  const [numeroInput, setNumeroInput] = useState('');
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [error, setError] = useState('');
@@ -22,12 +27,22 @@ const Profile: React.FC = () => {
 
   const handleAddAddress = (e: React.FormEvent) => {
     e.preventDefault();
-    if (newAddress.trim()) {
-      addDeliveryAddress(newAddress);
-      setNewAddress('');
-      setMessage('Dirección agregada correctamente');
-      setTimeout(() => setMessage(''), 3000);
+    // Validación simple
+    if (!regionInput || !comunaInput || !calleInput || !numeroInput) {
+      setError('Completa región, comuna, calle y número antes de agregar');
+      setTimeout(() => setError(''), 3000);
+      return;
     }
+
+    const address = `${calleInput} ${numeroInput}, ${comunaInput}, ${regionInput}`;
+    addDeliveryAddress(address);
+    // limpiar campos
+    setRegionInput('');
+    setComunaInput('');
+    setCalleInput('');
+    setNumeroInput('');
+    setMessage('Dirección agregada correctamente');
+    setTimeout(() => setMessage(''), 3000);
   };
 
   const handleChangePassword = (e: React.FormEvent) => {
@@ -95,6 +110,16 @@ const Profile: React.FC = () => {
                 )}
               </div>
 
+              {canSeeDashboard && (
+                <button
+                  className="btn w-100"
+                  onClick={() => navigate('/admin/dashboard')}
+                  style={{ backgroundColor: '#8B4513', borderColor: '#8B4513', color: 'white' }}
+                >
+                  Ir al Dashboard
+                </button>
+              )}
+
               <button 
                 className="btn w-100 mt-3"
                 onClick={handleLogout}
@@ -120,21 +145,66 @@ const Profile: React.FC = () => {
                   </li>
                 ))}
               </ul>
+
               <form onSubmit={handleAddAddress} className="mt-3">
-                <div className="input-group">
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="Nueva dirección"
-                    value={newAddress}
-                    onChange={(e) => setNewAddress(e.target.value)}
-                  />
+                <div className="row g-2">
+                  <div className="col-md-6">
+                    <label className="form-label">Región</label>
+                    <select
+                      className="form-select"
+                      value={regionInput}
+                      onChange={(e) => { setRegionInput(e.target.value); setComunaInput(''); }}
+                    >
+                      <option value="">Seleccione una región</option>
+                      {Object.keys(REGIONES_COMUNAS).map(r => (
+                        <option key={r} value={r}>{r}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="col-md-6">
+                    <label className="form-label">Comuna</label>
+                    <select
+                      className="form-select"
+                      value={comunaInput}
+                      onChange={(e) => setComunaInput(e.target.value)}
+                      disabled={!regionInput}
+                    >
+                      <option value="">Seleccione una comuna</option>
+                      {regionInput && REGIONES_COMUNAS[regionInput]?.map(c => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="row g-2 mt-2">
+                  <div className="col-md-8">
+                    <label className="form-label">Calle</label>
+                    <input
+                      className="form-control"
+                      value={calleInput}
+                      onChange={(e) => setCalleInput(e.target.value)}
+                      placeholder="Ej: Av. Principal"
+                    />
+                  </div>
+                  <div className="col-md-4">
+                    <label className="form-label">Número</label>
+                    <input
+                      className="form-control"
+                      value={numeroInput}
+                      onChange={(e) => setNumeroInput(e.target.value)}
+                      placeholder="Ej: 123"
+                    />
+                  </div>
+                </div>
+
+                <div className="d-grid mt-3">
                   <button 
                     type="submit" 
                     className="btn"
                     style={{ backgroundColor: '#FFC0CB', borderColor: '#FFC0CB', color: '#5D4037' }}
                   >
-                    Agregar
+                    Agregar dirección
                   </button>
                 </div>
               </form>
@@ -191,13 +261,18 @@ const Profile: React.FC = () => {
                         }}
                       >
                         <div className="d-flex align-items-center gap-3">
-                          <span style={{ fontFamily: 'Lato, sans-serif' }}>
-                            {new Date(pedido.fechaPedido).toLocaleDateString('es-CL', {
-                              day: 'numeric',
-                              month: 'long',
-                              year: 'numeric'
-                            })}
-                          </span>
+                            <div>
+                              <div style={{ fontFamily: 'Lato, sans-serif' }}>
+                                {new Date(pedido.fechaPedido).toLocaleDateString('es-CL', {
+                                  day: 'numeric',
+                                  month: 'long',
+                                  year: 'numeric'
+                                })}
+                              </div>
+                              {pedido.direccionEnvio && (
+                                <div className="small text-muted">Dirección: {pedido.direccionEnvio}</div>
+                              )}
+                            </div>
                           <span 
                             className="px-2 py-1 rounded" 
                             style={{ 
@@ -219,7 +294,7 @@ const Profile: React.FC = () => {
                       
                       {expandedPedido === pedido.id && (
                         <div className="p-3 border-top" style={{ backgroundColor: 'white' }}>
-                          {pedido.productos.map((producto) => (
+                          {pedido.productos.map((producto: any) => (
                             <div 
                               key={producto.productoId} 
                               className="d-flex justify-content-between align-items-center py-2"

@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { REGIONES_COMUNAS, validateName, validateEmail, validateAge, validatePhone } from '../../utils/validations';
-
-const USERS_KEY_OLD = 'users';
-const USERS_KEY_CONTEXT = 'np_users_v1';
+import { useUser } from '../../context/UserContext';
 
 const Register: React.FC = () => {
+  const { register } = useUser();
   const [formData, setFormData] = useState({
     nombre: '',
     email: '',
@@ -60,43 +59,15 @@ const Register: React.FC = () => {
     return Object.keys(newErrors).length === 0;
   };
 
-  const persistToBothKeys = (newUser: any) => {
-    // Guardar en key antigua 'users'
-    try {
-      const usersOld = JSON.parse(localStorage.getItem(USERS_KEY_OLD) || '[]');
-      usersOld.push(newUser);
-      localStorage.setItem(USERS_KEY_OLD, JSON.stringify(usersOld));
-    } catch {
-      // ignore
-    }
 
-    // Guardar también en la key usada por el contexto (np_users_v1) para consistencia
-    try {
-      const usersCtx = JSON.parse(localStorage.getItem(USERS_KEY_CONTEXT) || '[]');
-      // evitar duplicados por email
-      const exists = usersCtx.some((u: any) => u.email?.toLowerCase() === newUser.email.toLowerCase());
-      if (!exists) {
-        usersCtx.push(newUser);
-        localStorage.setItem(USERS_KEY_CONTEXT, JSON.stringify(usersCtx));
-      }
-    } catch {
-      // ignore
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!validateForm()) return;
 
-    const existingUsers = JSON.parse(localStorage.getItem('users') || '[]');
-    if (existingUsers.some((u: { email: string }) => u.email.toLowerCase() === formData.email.toLowerCase())) {
-      setError('Este email ya está registrado');
-      setTimeout(() => setError(''), 4000);
-      return;
-    }
-
     try {
+      // Registrar el usuario con el UserContext primero
       const fechaNacimiento = new Date(formData.fechaNacimiento);
       const hoy = new Date();
       let edad = hoy.getFullYear() - fechaNacimiento.getFullYear();
@@ -108,12 +79,8 @@ const Register: React.FC = () => {
       const descuentoCodigo = formData.codigoDescuento === 'FELICES50' ? 10 : 0;
       const cumpleanos = !!formData.fechaNacimiento;
 
-      const newUser = {
-        id: crypto.randomUUID(),
+      const userUpdate = {
         nombre: formData.nombre,
-        email: formData.email,
-        // <-- La contraseña se almacena aquí en localStorage
-        password: formData.password,
         direccion: `${formData.calle} ${formData.numero}, ${comuna}, ${region}`,
         telefono: formData.telefono,
         direccionesEntrega: [`${formData.calle} ${formData.numero}, ${comuna}, ${region}`],
@@ -125,15 +92,20 @@ const Register: React.FC = () => {
         cumpleanos
       };
 
-      // Persistir en localStorage (ambas keys para compatibilidad)
-      persistToBothKeys(newUser);
+      const result = register(formData.email, formData.password, userUpdate);
+      
+      if (!result.success) {
+        setError(result.message || 'Error al registrar usuario');
+        setTimeout(() => setError(''), 4000);
+        return;
+      }
 
-      // Mensajes/redirect
-      let beneficiosMessage = '';
-      if (newUser.esDuoc) beneficiosMessage += '¡Felicitaciones! Como estudiante DUOC, recibirás una torta gratis en tu cumpleaños. ';
-      if (newUser.descuentoEspecial > 0) beneficiosMessage += `Se ha aplicado un descuento especial del ${newUser.descuentoEspecial}% a tu cuenta. `;
+      // Mensajes de beneficios y redirección
+      const beneficios =
+        (esDuoc ? '¡Felicitaciones! Como estudiante DUOC, recibirás una torta gratis en tu cumpleaños. ' : '') +
+        (Math.max(descuentoEdad, descuentoCodigo) > 0 ? `Se ha aplicado un descuento especial del ${Math.max(descuentoEdad, descuentoCodigo)}% a tu cuenta. ` : '');
 
-      setMessage(beneficiosMessage || 'Registro exitoso');
+      setMessage(beneficios || 'Registro exitoso');
       setTimeout(() => navigate('/login'), 1500);
     } catch (err) {
       if (err instanceof Error) setError(`Error al registrar usuario: ${err.message}`);

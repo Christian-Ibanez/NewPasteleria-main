@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { CATALOGO_PRODUCTOS } from '../data/productos';
 import type { Producto } from '../data/productos';
+import { useProducts } from '../context/ProductsContext';
 
 const ProductCarousel: React.FC = () => {
   const [activeIndex, setActiveIndex] = useState(0);
-  const [productos] = useState<Producto[]>(
-    CATALOGO_PRODUCTOS.slice(0, 8) // Tomamos los primeros 8 productos para rotar
-  );
+  const { products } = useProducts();
+  const productos: Producto[] = products.slice(0, 8);
 
   useEffect(() => {
     const timer = setInterval(() => {

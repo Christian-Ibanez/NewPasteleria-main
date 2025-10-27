@@ -13,6 +13,7 @@ const Cart: React.FC = () => {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [itemToRemove, setItemToRemove] = useState<string | null>(null);
+  const [selectedAddress, setSelectedAddress] = useState<string>('');
 
   const subtotal = items.reduce((sum, item) => 
     sum + (item.producto.precio * item.cantidad), 0
@@ -49,6 +50,12 @@ const Cart: React.FC = () => {
       setShowLoginModal(true);
       return;
     }
+    // Preselect an address if none chosen yet
+    const defaultAddr = user.direccionesEntrega && user.direccionesEntrega.length > 0
+      ? user.direccionesEntrega[0]
+      : (user.direccion || '');
+    if (!selectedAddress && defaultAddr) setSelectedAddress(defaultAddr);
+
     setShowCheckoutModal(true);
   };
 
@@ -58,7 +65,8 @@ const Cart: React.FC = () => {
     // Crear el pedido
     const newPedido = {
       id: Math.random().toString(36).substring(2, 11),
-      usuarioId: user.id,
+      // user may not have an id field; use email as identifier
+      usuarioId: (user as any).id || user.email,
       productos: items.map(item => ({
         productoId: item.producto.id,
         cantidad: item.cantidad,
@@ -71,7 +79,7 @@ const Cart: React.FC = () => {
       total: total,
       estado: 'pendiente' as const,
       fechaPedido: new Date(),
-      direccionEnvio: user.direccion || ''
+      direccionEnvio: selectedAddress || user.direccion || ''
     };
 
     // Guardar el pedido en el historial del usuario
@@ -169,6 +177,35 @@ const Cart: React.FC = () => {
                   </div>
                 </div>
               ))}
+              <div className="my-3">
+                <label className="form-label">Dirección de entrega</label>
+                {user?.direccionesEntrega && user.direccionesEntrega.length > 0 ? (
+                  <select
+                    className="form-select"
+                    value={selectedAddress}
+                    onChange={(e) => setSelectedAddress(e.target.value)}
+                  >
+                    {user.direccionesEntrega.map((d: string, idx: number) => (
+                      <option key={idx} value={d}>{d}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="text-muted">No tienes direcciones guardadas. Se usará tu dirección principal si está disponible.</div>
+                )}
+                <div className="mt-2">
+                  <button
+                    type="button"
+                    className="btn btn-link p-0"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setShowCheckoutModal(false);
+                      navigate('/profile');
+                    }}
+                  >
+                    Agregar/editar direcciones
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
