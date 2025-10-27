@@ -20,8 +20,43 @@ const Dashboard: React.FC = () => {
 
   // Form state for products
   const [form, setForm] = useState<Partial<Producto>>({
-    nombre: '', descripcion: '', precio: 0, categoria: '', imagen: '', stock: 0, esPersonalizable: false,
+    id: '', nombre: '', descripcion: '', precio: 0, categoria: '', imagen: '', stock: 0, esPersonalizable: false,
   });
+
+  // helper: redimensiona y center-crop a un tamaño fijo, devuelve dataURL
+  const resizeImage = (file: File, targetW = 400, targetH = 300): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject('Error leyendo archivo');
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject('Error cargando imagen');
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = targetW;
+          canvas.height = targetH;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return reject('No se pudo obtener contexto');
+
+          // cover / center-crop
+          const ratio = Math.max(targetW / img.width, targetH / img.height);
+          const sw = targetW / ratio;
+          const sh = targetH / ratio;
+          const sx = (img.width - sw) / 2;
+          const sy = (img.height - sh) / 2;
+
+          // fondo blanco para evitar transparencias no deseadas
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, targetW, targetH);
+          ctx.drawImage(img, sx, sy, sw, sh, 0, 0, targetW, targetH);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+          resolve(dataUrl);
+        };
+        img.src = reader.result as string;
+      };
+      reader.readAsDataURL(file);
+    });
+  };
 
   // Si no es admin, mostramos un mensaje claro en lugar de navegar silenciosamente
   if (!isAdmin()) {
@@ -50,20 +85,56 @@ const Dashboard: React.FC = () => {
   const totalPedidos = useMemo(() => users.reduce((acc, u) => acc + (u.historialPedidos?.length || 0), 0), [users]);
   const totalIngresos = useMemo(() => users.reduce((acc, u) => acc + (u.historialPedidos?.reduce((s: number, p: any) => s + (p.total || 0), 0) || 0), 0), [users]);
 
+  // Cambiar estado de pedido: actualiza historialPedidos del usuario vía adminUpdateUser
+  const handleChangeOrderStatus = (orderId: string, userEmail: string, newStatus: string) => {
+    const user = users.find(u => u.email === userEmail);
+    if (!user) {
+      setMessage('Usuario no encontrado para el pedido');
+      setTimeout(() => setMessage(''), 3000);
+      return;
+    }
+    const updatedPedidos = (user.historialPedidos || []).map(p => p.id === orderId ? { ...p, estado: newStatus } : p);
+    const res = adminUpdateUser(userEmail, { historialPedidos: updatedPedidos });
+    setMessage(res?.success ? `Estado actualizado a "${newStatus}"` : (res?.message || 'No se pudo actualizar estado'));
+    setTimeout(() => setMessage(''), 3000);
+  };
+
   const handleAddProduct = (e: React.FormEvent) => {
     e.preventDefault();
+    const precio = Number(form.precio);
+    const stockVal = Number(form.stock) || 0;
+    const idValRaw = (form.id || '').trim();
+    const idVal = idValRaw.toUpperCase();
+    const idRegex = /^[A-Za-z0-9]{4,6}$/;
+
+    if (!idVal) {
+      setMessage('Ingrese una ID de producto (4–6 caracteres alfanuméricos).');
+      setTimeout(() => setMessage(''), 3000);
+      return;
+    }
+    if (!idRegex.test(idVal)) {
+      setMessage('ID inválida. Debe tener entre 4 y 6 caracteres (letras y/o números).');
+      setTimeout(() => setMessage(''), 3000);
+      return;
+    }
     if (!form.nombre || !form.descripcion || !form.categoria) {
       setMessage('Completa nombre, descripción y categoría');
       setTimeout(() => setMessage(''), 3000);
       return;
     }
+    if (!Number.isFinite(precio) || precio <= 0) {
+      setMessage('El precio debe ser mayor a 0');
+      setTimeout(() => setMessage(''), 3000);
+      return;
+    }
     addProduct({
-      nombre: form.nombre!, descripcion: form.descripcion!, categoria: form.categoria!, precio: Number(form.precio) || 0,
-      imagen: form.imagen, stock: Number(form.stock) || 0, esPersonalizable: !!form.esPersonalizable,
+      id: idVal,
+      nombre: form.nombre!, descripcion: form.descripcion!, categoria: form.categoria!, precio: precio,
+      imagen: form.imagen, stock: stockVal, esPersonalizable: !!form.esPersonalizable,
     });
-    setForm({ nombre: '', descripcion: '', precio: 0, categoria: '', imagen: '', stock: 0, esPersonalizable: false });
-    setMessage('Producto agregado');
-    setTimeout(() => setMessage(''), 3000);
+    setForm({ id: '', nombre: '', descripcion: '', precio: 0, categoria: '', imagen: '', stock: 0, esPersonalizable: false });
+    setMessage(`Producto agregado — ID: ${idVal} · Precio: $${precio.toLocaleString('es-CL')} · Stock: ${stockVal}`);
+    setTimeout(() => setMessage(''), 4000);
   };
 
   return (
@@ -170,19 +241,37 @@ const Dashboard: React.FC = () => {
                 <table className="table table-hover align-middle">
                   <thead>
                     <tr>
-                      <th>ID</th><th>Usuario</th><th>Fecha</th><th>Dirección</th><th>Total</th>
+                      <th>ID</th><th>Usuario</th><th>Fecha</th><th>Dirección</th><th>Total</th><th>Estado</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {users.flatMap(u => (u.historialPedidos || []).map(p => ({...p, email: u.email}))).sort((a,b)=> new Date(b.fechaPedido).getTime() - new Date(a.fechaPedido).getTime()).map(p => (
-                      <tr key={p.id}>
-                        <td>{p.id}</td>
-                        <td>{p.email}</td>
-                        <td>{new Date(p.fechaPedido).toLocaleString('es-CL')}</td>
-                        <td>{p.direccionEnvio || '-'}</td>
-                        <td>${p.total.toLocaleString('es-CL')}</td>
-                      </tr>
-                    ))}
+                    {users
+                      .flatMap(u => (u.historialPedidos || []).map(p => ({ ...p, email: u.email })))
+                      .sort((a, b) => new Date(b.fechaPedido).getTime() - new Date(a.fechaPedido).getTime())
+                      .map(p => {
+                        const estadoActual = (p as any).estado || 'En proceso';
+                        return (
+                          <tr key={p.id}>
+                            <td>{p.id}</td>
+                            <td>{(p as any).email}</td>
+                            <td>{new Date((p as any).fechaPedido).toLocaleString('es-CL')}</td>
+                            <td>{(p as any).direccionEnvio || '-'}</td>
+                            <td>${(p as any).total?.toLocaleString('es-CL') || 0}</td>
+                            <td style={{minWidth:160}}>
+                              <select
+                                className="form-select form-select-sm"
+                                value={estadoActual}
+                                onChange={(e) => handleChangeOrderStatus(p.id, (p as any).email, e.target.value)}
+                              >
+                                <option>En proceso</option>
+                                <option>En camino</option>
+                                <option>Entregado</option>
+                                <option>Cancelado</option>
+                              </select>
+                            </td>
+                          </tr>
+                        );
+                      })}
                   </tbody>
                 </table>
               </div>
@@ -197,15 +286,73 @@ const Dashboard: React.FC = () => {
                 <div className="card-body">
                   <h5 className="card-title">Agregar producto</h5>
                   <form onSubmit={handleAddProduct} className="d-grid gap-2">
+                    <input
+                      className="form-control"
+                      placeholder="ID (Alfanumérico)"
+                      value={form.id || ''}
+                      maxLength={6}
+                      onChange={e => setForm({ ...form, id: e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0,6) })}
+                    />
                     <input className="form-control" placeholder="Nombre" value={form.nombre||''} onChange={e=>setForm({...form, nombre:e.target.value})} />
                     <input className="form-control" placeholder="Categoría" value={form.categoria||''} onChange={e=>setForm({...form, categoria:e.target.value})} />
                     <textarea className="form-control" placeholder="Descripción" value={form.descripcion||''} onChange={e=>setForm({...form, descripcion:e.target.value})} />
                     <div className="row g-2">
-                      <div className="col-6"><input type="number" className="form-control" placeholder="Precio" value={form.precio||0} onChange={e=>setForm({...form, precio:Number(e.target.value)})} /></div>
-                      <div className="col-6"><input type="number" className="form-control" placeholder="Stock" value={form.stock||0} onChange={e=>setForm({...form, stock:Number(e.target.value)})} /></div>
+                      <div className="col-6">
+                        <label className="form-label small mb-1">Precio</label>
+                        <div className="input-group">
+                          <span className="input-group-text">$</span>
+                          <input
+                            aria-label="Precio"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            className="form-control"
+                            placeholder="0"
+                            value={form.precio ?? ''}
+                            onChange={e => setForm({ ...form, precio: Number(e.target.value) })}
+                          />
+                        </div>
+                      </div>
+                      <div className="col-6">
+                        <label className="form-label small mb-1">Stock</label>
+                        <input
+                          aria-label="Stock"
+                          type="number"
+                          min="0"
+                          step="1"
+                          className="form-control"
+                          placeholder="0"
+                          value={form.stock ?? ''}
+                          onChange={e => setForm({ ...form, stock: Number(e.target.value) })}
+                        />
+                      </div>
                     </div>
-                    <input className="form-control" placeholder="Imagen (archivo en /images/productos)" value={form.imagen||''} onChange={e=>setForm({...form, imagen:e.target.value})} />
-                    <div className="form-check">
+
+                    {/* Imagen: ahora aceptamos archivo, redimensionamos y mostramos preview */}
+                    <label className="form-label small mt-2">Imagen (archivo) <small className="text-muted">se adapta al tamaño estándar</small></label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="form-control"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        try {
+                          const data = await resizeImage(file, 400, 300);
+                          setForm({ ...form, imagen: data });
+                        } catch (err) {
+                          setMessage(typeof err === 'string' ? err : 'No se pudo procesar la imagen');
+                          setTimeout(() => setMessage(''), 3000);
+                        }
+                      }}
+                    />
+                    {form.imagen && (
+                      <div style={{ marginTop: 8 }}>
+                        <div className="small text-muted">Preview:</div>
+                        <img src={form.imagen} alt="preview" style={{ width: 120, height: 90, objectFit: 'cover', borderRadius: 4, marginTop: 6, border: '1px solid #e6e6e6' }} />
+                      </div>
+                    )}
+                    <div className="form-check mt-2">
                       <input className="form-check-input" type="checkbox" id="perso" checked={!!form.esPersonalizable} onChange={e=>setForm({...form, esPersonalizable:e.target.checked})} />
                       <label htmlFor="perso" className="form-check-label">Es personalizable</label>
                     </div>
@@ -222,7 +369,7 @@ const Dashboard: React.FC = () => {
                     <table className="table table-hover align-middle">
                       <thead>
                         <tr>
-                          <th>ID</th><th>Nombre</th><th>Precio</th><th>Stock</th><th>Acciones</th>
+                          <th>ID</th><th>Imagen</th><th>Nombre</th><th>Precio</th><th>Stock</th><th>Acciones</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -247,9 +394,14 @@ const Dashboard: React.FC = () => {
         )}
 
         <div className="mt-4 d-flex justify-content-between">
-          <Link to="/" className="btn btn-sm" style={{ backgroundColor: '#FFC0CB', borderColor: '#FFC0CB', color: '#5D4037' }}>
+          <button
+            type="button"
+            className="btn btn-sm"
+            style={{ backgroundColor: '#FFC0CB', borderColor: '#FFC0CB', color: '#5D4037' }}
+            onClick={handleLogout}
+          >
             Volver al sitio
-          </Link>
+          </button>
         </div>
 
         {/* Global confirm dialog (rendered outside tab panes) */}
@@ -290,10 +442,21 @@ const ProductRow: React.FC<{ pr: Producto; onDelete: ()=>void; onSave: (patch: P
   const [editing, setEditing] = useState(false);
   const [precio, setPrecio] = useState<number>(pr.precio);
   const [stock, setStock] = useState<number>(pr.stock);
-  // mantén el campo para futuras ampliaciones; por ahora solo editamos precio/stock
+
+  const resolveImageSrc = (img?: string) => {
+    if (!img) return '/images/productos/default.png';
+    if (img.startsWith('data:') || img.startsWith('/')) return img;
+    return `/images/productos/${img}`;
+  };
+
+  const thumbStyle: React.CSSProperties = { width: 80, height: 60, objectFit: 'cover', borderRadius: 4, border: '1px solid #e6e6e6' };
+
   return (
     <tr>
       <td>{pr.id}</td>
+      <td>
+        <img src={resolveImageSrc(pr.imagen)} alt={pr.nombre} style={thumbStyle} />
+      </td>
       <td>{pr.nombre}</td>
       <td>
         {editing ? (

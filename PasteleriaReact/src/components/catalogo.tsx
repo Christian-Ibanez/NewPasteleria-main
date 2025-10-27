@@ -8,7 +8,14 @@ import { useProducts } from '../context/ProductsContext';
 // Componente para una tarjeta de producto
 const TarjetaProducto: React.FC<{ producto: Producto }> = ({ producto }) => {
   const { addItem } = useCart();
-
+  // Resuelve la src de la imagen: acepta dataURL, rutas absolutas o nombres de archivo en /images/productos
+  const resolveImageSrc = (imagen?: string, codigo?: string) => {
+    if (!imagen && !codigo) return '/images/productos/placeholder.jpg';
+    if (imagen && imagen.startsWith('data:')) return imagen; // data URL subida desde dashboard
+    if (imagen && (imagen.startsWith('/') || imagen.startsWith('http'))) return imagen; // ruta absoluta o externa
+    const name = imagen || codigo || 'placeholder.jpg';
+    return `/images/productos/${name.toLowerCase()}`;
+  };
   const estiloTarjeta: React.CSSProperties = {
     backgroundColor: '#FFF5E1',
     color: '#5D4037',
@@ -65,7 +72,7 @@ const TarjetaProducto: React.FC<{ producto: Producto }> = ({ producto }) => {
       <div className="card h-100 shadow-sm" style={estiloTarjeta}>
         <div className="card-img-container" style={{ height: '200px', overflow: 'hidden' }}>
           <img
-            src={`/images/productos/${(producto.imagen ?? producto.codigo).toLowerCase()}`}
+            src={resolveImageSrc(producto.imagen, producto.codigo)}
             className="card-img-top"
             alt={producto.nombre}
             style={{
