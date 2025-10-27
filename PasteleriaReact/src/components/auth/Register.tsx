@@ -2,14 +2,17 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { REGIONES_COMUNAS, validateName, validateEmail, validateAge, validatePhone } from '../../utils/validations';
 
+const USERS_KEY_OLD = 'users';
+const USERS_KEY_CONTEXT = 'np_users_v1';
+
 const Register: React.FC = () => {
   const [formData, setFormData] = useState({
     nombre: '',
     email: '',
     password: '',
     confirmPassword: '',
-    calle: '', 
-    numero: '', 
+    calle: '',
+    numero: '',
     telefono: '',
     fechaNacimiento: '',
     codigoDescuento: ''
@@ -21,8 +24,8 @@ const Register: React.FC = () => {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const navigate = useNavigate();
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target as HTMLInputElement;
     setFormData(prev => ({
       ...prev,
       [name]: value
@@ -32,66 +35,84 @@ const Register: React.FC = () => {
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
 
-    
     const nameError = validateName(formData.nombre);
     if (nameError) newErrors.nombre = nameError;
 
-    
     const emailError = validateEmail(formData.email);
     if (emailError) newErrors.email = emailError;
 
-    
     const ageError = validateAge(formData.fechaNacimiento);
     if (ageError) newErrors.fechaNacimiento = ageError;
 
-    
     const phoneError = validatePhone(formData.telefono);
     if (phoneError) newErrors.telefono = phoneError;
 
-    
     if (!region) newErrors.region = 'Debes seleccionar una región';
     if (!comuna) newErrors.comuna = 'Debes seleccionar una comuna';
     if (!formData.calle) newErrors.calle = 'Debes ingresar una calle';
     if (!formData.numero) newErrors.numero = 'Debes ingresar un número';
 
+    // Validar confirmación de contraseña
+    if (!formData.password) newErrors.password = 'Debes ingresar una contraseña';
+    if (formData.password !== formData.confirmPassword) newErrors.confirmPassword = 'Las contraseñas no coinciden';
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!validateForm()) {
-      return;
+  const persistToBothKeys = (newUser: any) => {
+    // Guardar en key antigua 'users'
+    try {
+      const usersOld = JSON.parse(localStorage.getItem(USERS_KEY_OLD) || '[]');
+      usersOld.push(newUser);
+      localStorage.setItem(USERS_KEY_OLD, JSON.stringify(usersOld));
+    } catch {
+      // ignore
     }
 
-    
-    const users = JSON.parse(localStorage.getItem('users') || '[]');
-    if (users.some((u: { email: string }) => u.email === formData.email)) {
+    // Guardar también en la key usada por el contexto (np_users_v1) para consistencia
+    try {
+      const usersCtx = JSON.parse(localStorage.getItem(USERS_KEY_CONTEXT) || '[]');
+      // evitar duplicados por email
+      const exists = usersCtx.some((u: any) => u.email?.toLowerCase() === newUser.email.toLowerCase());
+      if (!exists) {
+        usersCtx.push(newUser);
+        localStorage.setItem(USERS_KEY_CONTEXT, JSON.stringify(usersCtx));
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!validateForm()) return;
+
+    const existingUsers = JSON.parse(localStorage.getItem('users') || '[]');
+    if (existingUsers.some((u: { email: string }) => u.email.toLowerCase() === formData.email.toLowerCase())) {
       setError('Este email ya está registrado');
+      setTimeout(() => setError(''), 4000);
       return;
     }
 
     try {
-      
       const fechaNacimiento = new Date(formData.fechaNacimiento);
       const hoy = new Date();
       let edad = hoy.getFullYear() - fechaNacimiento.getFullYear();
       const mes = hoy.getMonth() - fechaNacimiento.getMonth();
-      if (mes < 0 || (mes === 0 && hoy.getDate() < fechaNacimiento.getDate())) {
-        edad--;
-      }
+      if (mes < 0 || (mes === 0 && hoy.getDate() < fechaNacimiento.getDate())) edad--;
 
-      
       const esDuoc = formData.email.toLowerCase().endsWith('@duocuc.cl');
       const descuentoEdad = edad >= 50 ? 50 : 0;
       const descuentoCodigo = formData.codigoDescuento === 'FELICES50' ? 10 : 0;
-      const cumpleanos = formData.fechaNacimiento ? true : false;
-      
+      const cumpleanos = !!formData.fechaNacimiento;
+
       const newUser = {
         id: crypto.randomUUID(),
         nombre: formData.nombre,
         email: formData.email,
+        // <-- La contraseña se almacena aquí en localStorage
         password: formData.password,
         direccion: `${formData.calle} ${formData.numero}, ${comuna}, ${region}`,
         telefono: formData.telefono,
@@ -104,31 +125,19 @@ const Register: React.FC = () => {
         cumpleanos
       };
 
-      
+      // Persistir en localStorage (ambas keys para compatibilidad)
+      persistToBothKeys(newUser);
+
+      // Mensajes/redirect
       let beneficiosMessage = '';
-      if (newUser.esDuoc) {
-        beneficiosMessage += '¡Felicitaciones! Como estudiante DUOC, recibirás una torta gratis en tu cumpleaños. ';
-      }
-      if (newUser.descuentoEspecial > 0) {
-        beneficiosMessage += `Se ha aplicado un descuento especial del ${newUser.descuentoEspecial}% a tu cuenta. `;
-      }
+      if (newUser.esDuoc) beneficiosMessage += '¡Felicitaciones! Como estudiante DUOC, recibirás una torta gratis en tu cumpleaños. ';
+      if (newUser.descuentoEspecial > 0) beneficiosMessage += `Se ha aplicado un descuento especial del ${newUser.descuentoEspecial}% a tu cuenta. `;
 
-      
-      users.push(newUser);
-      localStorage.setItem('users', JSON.stringify(users));
-
-      
-      setMessage(beneficiosMessage);
-      setTimeout(() => {
-        navigate('/login');
-      }, 3000);
+      setMessage(beneficiosMessage || 'Registro exitoso');
+      setTimeout(() => navigate('/login'), 1500);
     } catch (err) {
-      if (err instanceof Error) {
-        setError(`Error al registrar usuario: ${err.message}`);
-      } else {
-        setError('Ocurrió un error inesperado durante el registro. Por favor, intente nuevamente.');
-      }
-      
+      if (err instanceof Error) setError(`Error al registrar usuario: ${err.message}`);
+      else setError('Ocurrió un error inesperado durante el registro.');
       setTimeout(() => setError(''), 5000);
     }
   };
@@ -142,10 +151,10 @@ const Register: React.FC = () => {
               <h2 className="text-center mb-4" style={{ fontFamily: 'Pacifico, cursive', color: '#5D4037' }}>
                 Registro
               </h2>
-              
+
               {error && <div className="alert alert-danger">{error}</div>}
               {message && <div className="alert alert-success">{message}</div>}
-              
+
               <form onSubmit={handleSubmit}>
                 <div className="row">
                   <div className="col-md-6 mb-3">
@@ -161,7 +170,7 @@ const Register: React.FC = () => {
                     />
                     {errors.nombre && <div className="invalid-feedback">{errors.nombre}</div>}
                   </div>
-                  
+
                   <div className="col-md-6 mb-3">
                     <label htmlFor="email" className="form-label">Email</label>
                     <input
@@ -182,15 +191,16 @@ const Register: React.FC = () => {
                     <label htmlFor="password" className="form-label">Contraseña</label>
                     <input
                       type="password"
-                      className="form-control"
+                      className={`form-control ${errors.password ? 'is-invalid' : ''}`}
                       id="password"
                       name="password"
                       value={formData.password}
                       onChange={handleChange}
                       required
                     />
+                    {errors.password && <div className="invalid-feedback">{errors.password}</div>}
                   </div>
-                  
+
                   <div className="col-md-6 mb-3">
                     <label htmlFor="confirmPassword" className="form-label">Confirmar contraseña</label>
                     <input
@@ -231,7 +241,7 @@ const Register: React.FC = () => {
                     value={formData.fechaNacimiento}
                     onChange={handleChange}
                     required
-                    max={new Date().toISOString().split('T')[0]} // Previene fechas futuras
+                    max={new Date().toISOString().split('T')[0]}
                   />
                   {errors.fechaNacimiento && (
                     <div className="invalid-feedback">
@@ -239,7 +249,7 @@ const Register: React.FC = () => {
                     </div>
                   )}
                 </div>
-                
+
                 <div className="row">
                   <div className="col-md-6 mb-3">
                     <label htmlFor="codigoDescuento" className="form-label">Código de descuento (opcional)</label>
@@ -294,7 +304,7 @@ const Register: React.FC = () => {
                     {errors.comuna && <div className="invalid-feedback">{errors.comuna}</div>}
                   </div>
                 </div>
-                
+
                 <div className="row">
                   <div className="col-md-8 mb-3">
                     <label htmlFor="calle" className="form-label">Calle</label>
@@ -310,7 +320,7 @@ const Register: React.FC = () => {
                     />
                     {errors.calle && <div className="invalid-feedback">{errors.calle}</div>}
                   </div>
-                  
+
                   <div className="col-md-4 mb-3">
                     <label htmlFor="numero" className="form-label">Número</label>
                     <input
@@ -326,7 +336,6 @@ const Register: React.FC = () => {
                     {errors.numero && <div className="invalid-feedback">{errors.numero}</div>}
                   </div>
 
-                  {/* Campo de solo lectura para mostrar la dirección completa */}
                   <div className="col-12 mb-3">
                     <label className="form-label">Dirección completa</label>
                     <input
@@ -338,7 +347,7 @@ const Register: React.FC = () => {
                     />
                   </div>
                 </div>
-                
+
                 <button
                   type="submit"
                   className="btn w-100 mb-3"
@@ -346,7 +355,7 @@ const Register: React.FC = () => {
                 >
                   Registrarse
                 </button>
-                
+
                 <div className="text-center">
                   <p>
                     ¿Ya tienes cuenta?{' '}
@@ -356,6 +365,7 @@ const Register: React.FC = () => {
                   </p>
                 </div>
               </form>
+
             </div>
           </div>
         </div>

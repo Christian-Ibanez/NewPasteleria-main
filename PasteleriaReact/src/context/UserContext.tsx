@@ -1,123 +1,125 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import type { Usuario, Pedido } from '../types';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 
-interface UserContextType {
-  user: Usuario | null;
+type Role = 'user' | 'admin' | 'system';
+
+type User = {
+  email: string;
+  password: string; // Nota: para demo queda en texto plano; en producción usar hash
+  role: Role;
+  immutable?: boolean; // si true no puede borrarse
+};
+
+type UserContextValue = {
+  users: User[];
+  currentUser: User | null;
   login: (email: string, password: string) => boolean;
   logout: () => void;
-  updateUser: (userData: Partial<Usuario>) => void;
-  addDeliveryAddress: (address: string) => void;
-  changePassword: (oldPassword: string, newPassword: string) => boolean;
-  addPedido: (pedido: Pedido) => void;
-}
+  register: (email: string, password: string) => { success: boolean; message?: string };
+  deleteUser: (email: string) => { success: boolean; message?: string };
+  isAdmin: () => boolean;
+};
 
-const UserContext = createContext<UserContextType | undefined>(undefined);
+const UserContext = createContext<UserContextValue | undefined>(undefined);
+
+const USERS_KEY = 'np_users_v1';
+const CURRENT_KEY = 'np_current_user_v1';
+
+const seedUsers: User[] = [
+  { email: 'system@admin.cl', password: 'system', role: 'system', immutable: true },
+  { email: 'admin@admin.cl', password: 'admin', role: 'admin' },
+];
 
 export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<Usuario | null>(null);
-
-  // Cargar usuario del localStorage al iniciar
-  useEffect(() => {
-    const storedUser = localStorage.getItem('currentUser');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
+  const [users, setUsers] = useState<User[]>(() => {
+    try {
+      const raw = localStorage.getItem(USERS_KEY);
+      if (!raw) {
+        localStorage.setItem(USERS_KEY, JSON.stringify(seedUsers));
+        return seedUsers;
+      }
+      const parsed = JSON.parse(raw) as User[];
+      // Ensure seed users exist (idempotente)
+      const emails = parsed.map(u => u.email.toLowerCase());
+      const toAdd = seedUsers.filter(s => !emails.includes(s.email.toLowerCase()));
+      if (toAdd.length > 0) {
+        const merged = [...parsed, ...toAdd];
+        localStorage.setItem(USERS_KEY, JSON.stringify(merged));
+        return merged;
+      }
+      return parsed;
+    } catch {
+      localStorage.setItem(USERS_KEY, JSON.stringify(seedUsers));
+      return seedUsers;
     }
-  }, []);
+  });
 
-  const login = (email: string, password: string): boolean => {
-    const users = JSON.parse(localStorage.getItem('users') || '[]');
-    const foundUser = users.find((u: Usuario) => u.email === email && u.password === password);
-    
-    if (foundUser) {
-      // No guardar la contraseña en el estado
-      const { password: _, ...userWithoutPassword } = foundUser;
-      setUser(userWithoutPassword);
-      localStorage.setItem('currentUser', JSON.stringify(userWithoutPassword));
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    try {
+      const raw = localStorage.getItem(CURRENT_KEY);
+      return raw ? (JSON.parse(raw) as User) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem(USERS_KEY, JSON.stringify(users));
+  }, [users]);
+
+  useEffect(() => {
+    if (currentUser) localStorage.setItem(CURRENT_KEY, JSON.stringify(currentUser));
+    else localStorage.removeItem(CURRENT_KEY);
+  }, [currentUser]);
+
+  const login = (email: string, password: string) => {
+    const found = users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
+    if (found) {
+      setCurrentUser(found);
       return true;
     }
     return false;
   };
 
   const logout = () => {
-    setUser(null);
-    localStorage.removeItem('currentUser');
+    setCurrentUser(null);
   };
 
-  const updateUser = (userData: Partial<Usuario>) => {
-    if (user) {
-      const updatedUser = { ...user, ...userData };
-      setUser(updatedUser);
-      
-      // Actualizar en localStorage
-      localStorage.setItem('currentUser', JSON.stringify(updatedUser));
-      
-      // Actualizar en la lista de usuarios
-      const users = JSON.parse(localStorage.getItem('users') || '[]');
-      const updatedUsers = users.map((u: Usuario) => 
-        u.id === user.id ? { ...u, ...userData } : u
-      );
-      localStorage.setItem('users', JSON.stringify(updatedUsers));
+  const register = (email: string, password: string) => {
+    if (users.some(u => u.email.toLowerCase() === email.toLowerCase())) {
+      return { success: false, message: 'El email ya está registrado' };
     }
+    const nuevo: User = { email, password, role: 'user' };
+    setUsers(prev => [...prev, nuevo]);
+    return { success: true };
   };
 
-  const addDeliveryAddress = (address: string) => {
-    if (user) {
-      const updatedAddresses = [...(user.direccionesEntrega || []), address];
-      updateUser({ direccionesEntrega: updatedAddresses });
+  const deleteUser = (email: string) => {
+    const target = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+    if (!target) return { success: false, message: 'Usuario no encontrado' };
+    if (target.immutable || target.role === 'system' || target.email.toLowerCase() === 'system@admin.cl') {
+      return { success: false, message: 'Este usuario no puede eliminarse' };
     }
-  };
-
-  const changePassword = (oldPassword: string, newPassword: string): boolean => {
-    const users = JSON.parse(localStorage.getItem('users') || '[]');
-    const currentUser = users.find((u: Usuario) => u.id === user?.id);
-    
-    if (currentUser && currentUser.password === oldPassword) {
-      const updatedUsers = users.map((u: Usuario) => 
-        u.id === user?.id ? { ...u, password: newPassword } : u
-      );
-      localStorage.setItem('users', JSON.stringify(updatedUsers));
-      return true;
+    setUsers(prev => prev.filter(u => u.email.toLowerCase() !== email.toLowerCase()));
+    // Si se borró el usuario logueado, cerramos sesión
+    if (currentUser && currentUser.email.toLowerCase() === email.toLowerCase()) {
+      logout();
     }
-    return false;
+    return { success: true };
   };
 
-  const addPedido = (pedido: Pedido) => {
-    if (user) {
-      const updatedUser = {
-        ...user,
-        historialPedidos: [...(user.historialPedidos || []), pedido]
-      };
-      setUser(updatedUser);
-      
-      // Actualizar en localStorage
-      localStorage.setItem('currentUser', JSON.stringify(updatedUser));
-      
-      // Actualizar en la lista de usuarios
-      const users = JSON.parse(localStorage.getItem('users') || '[]');
-      const updatedUsers = users.map((u: Usuario) => 
-        u.id === user.id ? updatedUser : u
-      );
-      localStorage.setItem('users', JSON.stringify(updatedUsers));
-    }
+  const isAdmin = () => {
+    return !!currentUser && (currentUser.role === 'admin' || currentUser.role === 'system' || currentUser.email.toLowerCase().endsWith('@admin.cl'));
   };
 
-  const value = {
-    user,
-    login,
-    logout,
-    updateUser,
-    addDeliveryAddress,
-    changePassword,
-    addPedido
-  };
-
-  return <UserContext.Provider value={value}>{children}</UserContext.Provider>;
+  return (
+    <UserContext.Provider value={{ users, currentUser, login, logout, register, deleteUser, isAdmin }}>
+      {children}
+    </UserContext.Provider>
+  );
 };
 
 export const useUser = () => {
-  const context = useContext(UserContext);
-  if (context === undefined) {
-    throw new Error('useUser must be used within a UserProvider');
-  }
-  return context;
+  const ctx = useContext(UserContext);
+  if (!ctx) throw new Error('useUser debe usarse dentro de UserProvider');
+  return ctx;
 };

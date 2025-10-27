@@ -14,16 +14,18 @@ const Login: React.FC = () => {
     try {
       const success = login(email, password);
       if (success) {
-        navigate('/profile');
+        // Si es un correo admin, redirigir al dashboard
+        if (email.toLowerCase().endsWith('@admin.cl')) {
+          navigate('/admin/dashboard');
+        } else {
+          navigate('/profile');
+        }
       } else {
         setError('Email o contraseña incorrectos');
+        setTimeout(() => setError(''), 5000);
       }
     } catch (err) {
-      if (err instanceof Error) {
-        setError(`Error al iniciar sesión: ${err.message}`);
-      } else {
-        setError('Ocurrió un error inesperado. Por favor, intente nuevamente.');
-      }
+      setError('Ocurrió un error inesperado. Por favor, intente nuevamente.');
       setTimeout(() => setError(''), 5000);
     }
   };
@@ -72,6 +74,12 @@ const Login: React.FC = () => {
                 >
                   Iniciar Sesión
                 </button>
+
+                <div className="text-center mb-3">
+                  <small className="text-muted">
+                    Para acceder como administrador, use un correo terminado en @admin.cl
+                  </small>
+                </div>
                 
                 <div className="text-center">
                   <p>
