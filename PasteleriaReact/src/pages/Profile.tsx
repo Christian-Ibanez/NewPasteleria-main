@@ -299,7 +299,15 @@ const Profile: React.FC = () => {
                               key={producto.productoId} 
                               className="d-flex justify-content-between align-items-center py-2"
                             >
-                              <span>{producto.nombre}</span>
+                              <div>
+                                <span>{producto.nombre}</span>
+                                {producto.personalizacion && (
+                                  <small className="d-block text-muted">
+                                    <i className="bi bi-pencil-square me-1"></i>
+                                    Mensaje: {producto.personalizacion}
+                                  </small>
+                                )}
+                              </div>
                               <span className="text-muted">Cantidad: {producto.cantidad}</span>
                             </div>
                           ))}

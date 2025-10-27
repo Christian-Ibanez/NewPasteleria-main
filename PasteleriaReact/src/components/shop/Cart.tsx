@@ -65,14 +65,14 @@ const Cart: React.FC = () => {
     // Crear el pedido
     const newPedido = {
       id: Math.random().toString(36).substring(2, 11),
-      // user may not have an id field; use email as identifier
       usuarioId: (user as any).id || user.email,
       productos: items.map(item => ({
         productoId: item.producto.id,
         cantidad: item.cantidad,
         precio: item.producto.precio,
         nombre: item.producto.nombre,
-        imagen: item.producto.imagen
+        imagen: item.producto.imagen,
+        personalizacion: item.personalizacion // Añadir el mensaje personalizado
       })),
       subtotal: subtotal,
       descuento: calculateDiscount(),
@@ -93,6 +93,14 @@ const Cart: React.FC = () => {
       setShowSuccessModal(false);
       navigate('/profile');
     }, 2000);
+  };
+
+  // Añade esta función helper dentro del componente Cart
+  const resolveImageSrc = (imagen?: string) => {
+    if (!imagen) return '/images/productos/placeholder.jpg';
+    if (imagen.startsWith('data:')) return imagen; // Si es base64
+    if (imagen.startsWith('http') || imagen.startsWith('/')) return imagen; // Si es URL o ruta absoluta
+    return `/images/productos/${imagen}`; // Si es nombre de archivo
   };
 
   return (
@@ -128,7 +136,7 @@ const Cart: React.FC = () => {
                       boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
                     }}>
                       <img
-                        src={`/images/productos/${item.producto.imagen}`}
+                        src={resolveImageSrc(item.producto.imagen)}
                         alt={item.producto.nombre}
                         style={{
                           width: '100%',
@@ -145,6 +153,12 @@ const Cart: React.FC = () => {
                   <div className="col-md-4">
                     <h5>{item.producto.nombre}</h5>
                     <p className="text-muted">${item.producto.precio.toLocaleString('es-CL')} CLP</p>
+                    {item.personalizacion && (
+                      <small className="d-block text-muted">
+                        <i className="bi bi-pencil-square me-1"></i>
+                        Mensaje: {item.personalizacion}
+                      </small>
+                    )}
                   </div>
                   <div className="col-md-3">
                     <div className="input-group">
@@ -331,13 +345,23 @@ const Cart: React.FC = () => {
                 <div key={item.producto.id} className="d-flex justify-content-between align-items-center mb-3">
                   <div className="d-flex align-items-center">
                     <img
-                      src={`/images/productos/${item.producto.imagen}`}
+                      src={resolveImageSrc(item.producto.imagen)}
                       alt={item.producto.nombre}
                       style={{ width: '50px', height: '50px', objectFit: 'cover', marginRight: '15px', borderRadius: '5px' }}
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.src = '/images/productos/placeholder.jpg';
+                      }}
                     />
                     <div>
                       <h6 className="mb-0">{item.producto.nombre}</h6>
                       <small className="text-muted">Cantidad: {item.cantidad}</small>
+                      {item.personalizacion && (
+                        <small className="d-block text-muted">
+                          <i className="bi bi-pencil-square me-1"></i>
+                          {item.personalizacion}
+                        </small>
+                      )}
                     </div>
                   </div>
                   <div className="text-end">
