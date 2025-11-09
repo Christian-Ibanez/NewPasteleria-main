@@ -269,20 +269,47 @@ const Profile: React.FC = () => {
                                   year: 'numeric'
                                 })}
                               </div>
-                              {pedido.direccionEnvio && (
-                                <div className="small text-muted">Dirección: {pedido.direccionEnvio}</div>
-                              )}
+                                {pedido.direccionEnvio && (
+                                  <div className="small text-muted">Dirección: {pedido.direccionEnvio}</div>
+                                )}
+                                {/* Mostrar método de pago si existe */}
+                                {pedido.metodoPago && (
+                                  <div className="small text-muted">Pago: {pedido.metodoPago === 'efectivo' ? 'Efectivo' : `Tarjeta ****${pedido.tarjetaUltimos4 ?? '----'}`}</div>
+                                )}
                             </div>
-                          <span 
-                            className="px-2 py-1 rounded" 
-                            style={{ 
-                              backgroundColor: '#90EE90',
-                              color: '#006400',
-                              fontSize: '0.85rem'
-                            }}
-                          >
-                            Pagado
-                          </span>
+                          <div className="d-flex flex-column flex-sm-row align-items-start align-items-sm-center gap-2">
+                            <span
+                              className="px-2 py-1 rounded"
+                              style={{
+                                backgroundColor: '#90EE90',
+                                color: '#006400',
+                                fontSize: '0.85rem'
+                              }}
+                            >
+                              Pagado
+                            </span>
+                            {/* Estado del pedido (coloreado) */}
+                            {pedido.estado && (() => {
+                              const estadoRaw = String(pedido.estado);
+                              const label = (estadoRaw === 'pendiente' || estadoRaw.toLowerCase().includes('proceso') ) ? 'En proceso'
+                                : (estadoRaw.toLowerCase().includes('preparacion') ? 'En preparación'
+                                : (estadoRaw.toLowerCase().includes('en camino') || estadoRaw.toLowerCase().includes('enviado') ? 'En camino'
+                                : (estadoRaw.toLowerCase().includes('entregado') ? 'Entregado' : estadoRaw)));
+                              const colorMap: Record<string, { bg: string; fg: string }> = {
+                                'En proceso': { bg: '#FFF4E5', fg: '#8A5800' },
+                                'En preparación': { bg: '#FFF4E5', fg: '#8A5800' },
+                                'En camino': { bg: '#E8F4FF', fg: '#0B5FFF' },
+                                'Entregado': { bg: '#E6F4EA', fg: '#1B7A2F' },
+                                'Cancelado': { bg: '#FDECEA', fg: '#B00020' }
+                              };
+                              const colors = colorMap[label] ?? { bg: '#F0F0F0', fg: '#333' };
+                              return (
+                                <span className="px-2 py-1 rounded" style={{ backgroundColor: colors.bg, color: colors.fg, fontSize: '0.85rem' }}>
+                                  {label}
+                                </span>
+                              );
+                            })()}
+                          </div>
                         </div>
                         <div className="d-flex align-items-center gap-3">
                           <span className="fw-bold">

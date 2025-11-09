@@ -59,7 +59,7 @@ const Cart: React.FC = () => {
     setShowCheckoutModal(true);
   };
 
-  const handleConfirmPurchase = () => {
+  const handleConfirmPurchase = (metodoPago?: 'efectivo' | 'tarjeta', tarjetaUltimos4?: string) => {
     if (!user) return;
 
     // Crear el pedido
@@ -79,7 +79,9 @@ const Cart: React.FC = () => {
       total: total,
       estado: 'pendiente' as const,
       fechaPedido: new Date(),
-      direccionEnvio: selectedAddress || user.direccion || ''
+      direccionEnvio: selectedAddress || user.direccion || '',
+      metodoPago: metodoPago || 'efectivo',
+      tarjetaUltimos4: tarjetaUltimos4
     };
 
     // Guardar el pedido en el historial del usuario
@@ -93,6 +95,60 @@ const Cart: React.FC = () => {
       setShowSuccessModal(false);
       navigate('/profile');
     }, 2000);
+  };
+
+  // Payment form state for checkout modal
+  const [paymentMethod, setPaymentMethod] = useState<'efectivo' | 'tarjeta'>('efectivo');
+  const [cardNumber, setCardNumber] = useState('');
+  const [cardExpiry, setCardExpiry] = useState('');
+  const [cardName, setCardName] = useState('');
+  const [cardCvv, setCardCvv] = useState('');
+  const [paymentErrors, setPaymentErrors] = useState<string[]>([]);
+
+  const formatCardNumber = (value: string) => {
+    const digits = value.replace(/\D/g, '').slice(0,16);
+    return digits.replace(/(.{4})/g, '$1 ').trim();
+  };
+
+  const validateCardFields = () => {
+    const errors: string[] = [];
+    const digits = cardNumber.replace(/\s/g, '');
+    if (digits.length !== 16) errors.push('El número de tarjeta debe tener 16 dígitos.');
+    // expiry MM/YY or MM/YYYY
+    const exp = cardExpiry.replace(/\s/g, '');
+    const mmyy = exp.split('/');
+    if (mmyy.length !== 2) errors.push('La fecha de vencimiento debe tener formato MM/AA.');
+    else {
+      const mm = parseInt(mmyy[0], 10);
+      const yy = parseInt(mmyy[1], 10);
+      if (!(mm >=1 && mm <=12)) errors.push('Mes de vencimiento inválido.');
+      // basic future check (assume YY or YYYY)
+      const now = new Date();
+      let year = yy;
+      if (mmyy[1].length === 2) year = 2000 + yy;
+      if (mmyy[1].length === 4) year = yy;
+      const expDate = new Date(year, mm - 1, 1);
+      if (expDate < new Date(now.getFullYear(), now.getMonth(), 1)) errors.push('La tarjeta está vencida.');
+    }
+  if (!cardName || cardName.trim().length < 2) errors.push('Ingresa el nombre en la tarjeta.');
+  if (!/^[0-9]{3}$/.test(cardCvv)) errors.push('CVV inválido (3 dígitos).');
+    setPaymentErrors(errors);
+    return errors.length === 0;
+  };
+
+  const handleConfirmPayment = () => {
+    if (paymentMethod === 'efectivo') {
+      handleConfirmPurchase('efectivo');
+      return;
+    }
+
+    // tarjeta
+    if (validateCardFields()) {
+      // could store partial payment info like last4 if desired
+      const digits = cardNumber.replace(/\s/g, '');
+      const last4 = digits.slice(-4);
+      handleConfirmPurchase('tarjeta', last4);
+    }
   };
 
   // Añade esta función helper dentro del componente Cart
@@ -402,6 +458,90 @@ const Cart: React.FC = () => {
                     <h4 className="mb-0">${total.toLocaleString('es-CL')} CLP</h4>
                   </div>
                 </div>
+
+                {/* Payment method selector */}
+                <div className="mt-4">
+                  <label className="form-label">Método de Pago</label>
+                  <div className="d-flex gap-3 mb-3">
+                    <div>
+                      <label style={{ cursor: 'pointer' }}>
+                        <input type="radio" name="payment" checked={paymentMethod === 'efectivo'} onChange={() => setPaymentMethod('efectivo')} />{' '}
+                        Efectivo
+                      </label>
+                    </div>
+                    <div>
+                      <label style={{ cursor: 'pointer' }}>
+                        <input type="radio" name="payment" checked={paymentMethod === 'tarjeta'} onChange={() => setPaymentMethod('tarjeta')} />{' '}
+                        Tarjeta (débito/crédito)
+                      </label>
+                    </div>
+                  </div>
+
+                  {paymentMethod === 'tarjeta' && (
+                    <div className="card p-3" style={{ background: '#fff' }}>
+                      <div className="mb-3">
+                        <label className="form-label">Número de tarjeta</label>
+                        <input
+                          className="form-control"
+                          placeholder="1234 5678 9012 3456"
+                          value={cardNumber}
+                          onChange={(e) => setCardNumber(formatCardNumber(e.target.value))}
+                        />
+                      </div>
+
+                      <div className="row">
+                        <div className="col-md-4 mb-3">
+                          <label className="form-label">Fecha de vencimiento (MM/AA)</label>
+                          <input
+                            className="form-control"
+                            placeholder="MM/AA"
+                            value={cardExpiry}
+                            onChange={(e) => {
+                              // format simple MM/YY
+                              const digits = e.target.value.replace(/\D/g, '').slice(0,4);
+                              let formatted = digits;
+                              if (digits.length > 2) formatted = digits.slice(0,2) + '/' + digits.slice(2);
+                              setCardExpiry(formatted);
+                            }}
+                          />
+                        </div>
+                        <div className="col-md-5 mb-3">
+                          <label className="form-label">Nombre en la tarjeta</label>
+                          <input
+                            className="form-control"
+                            value={cardName}
+                            aria-describedby="cardNameHelp"
+                            onChange={(e) => {
+                              // permitir sólo letras (incluye acentos) y espacios
+                              const cleaned = e.target.value.replace(/[^A-Za-zÀ-ÖØ-öø-ÿ\s]/g, '');
+                              setCardName(cleaned);
+                            }}
+                          />
+                          <div id="cardNameHelp" className="form-text text-muted">Solo letras y espacios.</div>
+                        </div>
+                        <div className="col-md-3 mb-3">
+                          <label className="form-label">CVV</label>
+                          <input
+                            className="form-control"
+                            value={cardCvv}
+                            aria-describedby="cardCvvHelp"
+                            onChange={(e) => setCardCvv(e.target.value.replace(/\D/g, '').slice(0,3))}
+                            placeholder="123"
+                          />
+                          <div id="cardCvvHelp" className="form-text text-muted">CVV: 3 dígitos.</div>
+                        </div>
+                      </div>
+
+                      {paymentErrors.length > 0 && (
+                        <div className="mt-2 text-danger">
+                          {paymentErrors.map((err, idx) => (
+                            <div key={idx}>{err}</div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
             <div className="modal-footer">
@@ -414,7 +554,7 @@ const Cart: React.FC = () => {
               </button>
               <button
                 className="btn ms-2"
-                onClick={handleConfirmPurchase}
+                onClick={handleConfirmPayment}
                 style={{ backgroundColor: '#FFC0CB', borderColor: '#FFC0CB', color: '#5D4037' }}
               >
                 Pagar

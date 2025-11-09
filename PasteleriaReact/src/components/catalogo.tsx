@@ -1,12 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import type { Producto } from '../data/productos';
+import ProductModal from './ProductModal.tsx';
 import { useCart } from '../context/CartContext';
 import { useProducts } from '../context/ProductsContext';
 // Importamos 'Container', 'Row' y 'Col' de react-bootstrap si lo usas, 
 // o simplemente clases de Bootstrap si no. Usaremos clases simples para este ejemplo.
 
 // Componente para una tarjeta de producto
-const TarjetaProducto: React.FC<{ producto: Producto }> = ({ producto }) => {
+const TarjetaProducto: React.FC<{ producto: Producto; onImageClick?: (p: Producto) => void }> = ({ producto, onImageClick }) => {
   const { addItem } = useCart();
   // Resuelve la src de la imagen: acepta dataURL, rutas absolutas o nombres de archivo en /images/productos
   const resolveImageSrc = (imagen?: string, codigo?: string) => {
@@ -70,7 +71,7 @@ const TarjetaProducto: React.FC<{ producto: Producto }> = ({ producto }) => {
   return (
     <div className="col-12 col-sm-6 col-md-4 col-lg-3 mb-4">
       <div className="card h-100 shadow-sm" style={estiloTarjeta}>
-        <div className="card-img-container" style={{ height: '200px', overflow: 'hidden' }}>
+        <div className="card-img-container" style={{ height: '200px', overflow: 'hidden', cursor: onImageClick ? 'pointer' : 'default' }}>
           <img
             src={resolveImageSrc(producto.imagen, producto.codigo)}
             className="card-img-top"
@@ -80,6 +81,7 @@ const TarjetaProducto: React.FC<{ producto: Producto }> = ({ producto }) => {
               height: '100%',
               width: '100%'
             }}
+            onClick={() => onImageClick && onImageClick(producto)}
             onError={(e) => {
               const target = e.target as HTMLImageElement;
               target.src = '/images/productos/placeholder.jpg';
@@ -174,6 +176,9 @@ const Catalogo: React.FC = () => {
   const { products: productos } = useProducts();
   const [busqueda, setBusqueda] = useState('');
   const [filtros, setFiltros] = useState<string[]>([]);
+  // Estado para el modal de producto
+  const [selectedProducto, setSelectedProducto] = useState<Producto | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
 
   // Categorías disponibles
   const categorias = [
@@ -253,9 +258,26 @@ const Catalogo: React.FC = () => {
       {/* Listado de Productos (Grid de Bootstrap) */}
       <div className="row">
         {productosFiltrados.map((producto) => (
-          <TarjetaProducto key={producto.codigo} producto={producto} />
+          <TarjetaProducto
+            key={producto.codigo}
+            producto={producto}
+            onImageClick={(p) => {
+              setSelectedProducto(p);
+              setModalVisible(true);
+            }}
+          />
         ))}
       </div>
+
+      {/* Modal de producto */}
+      <ProductModal
+        producto={selectedProducto}
+        visible={modalVisible}
+        onClose={() => {
+          setModalVisible(false);
+          setSelectedProducto(null);
+        }}
+      />
     </div>
   );
 };

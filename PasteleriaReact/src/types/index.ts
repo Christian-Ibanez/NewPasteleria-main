@@ -37,6 +37,10 @@ export interface Pedido {
     imagen: string;
   }[];
   total: number;
+  // Método de pago usado para el pedido
+  metodoPago?: 'efectivo' | 'tarjeta';
+  // Si se pagó con tarjeta, opcionalmente guardar los últimos 4 dígitos
+  tarjetaUltimos4?: string;
   estado: 'pendiente' | 'preparacion' | 'enviado' | 'entregado';
   fechaPedido: Date;
   direccionEnvio: string;
