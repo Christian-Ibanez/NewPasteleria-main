@@ -2,10 +2,12 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../../context/CartContext';
 import { useUser } from '../../context/UserContext';
+import { useProducts } from '../../context/ProductsContext';
 
 const Cart: React.FC = () => {
   const { items, updateQuantity, clearCart } = useCart();
   const { user, addPedido } = useUser();
+  const { products, updateProduct } = useProducts();
   const navigate = useNavigate();
   
   const [showRemoveModal, setShowRemoveModal] = useState(false);
@@ -29,11 +31,14 @@ const Cart: React.FC = () => {
 
   const handleUpdateQuantity = (productoId: string, newQuantity: number) => {
     const item = items.find(i => i.producto.id === productoId);
-    if (item && item.cantidad === 1 && newQuantity === 0) {
+    const prod = products.find(p => p.id === productoId) || item?.producto;
+    const available = prod?.stock ?? 0;
+    const capped = Math.max(0, Math.min(newQuantity, available));
+    if (item && item.cantidad === 1 && capped === 0) {
       setItemToRemove(productoId);
       setShowRemoveModal(true);
     } else {
-      updateQuantity(productoId, Math.max(0, newQuantity));
+      updateQuantity(productoId, capped);
     }
   };
 
@@ -61,6 +66,31 @@ const Cart: React.FC = () => {
 
   const handleConfirmPurchase = (metodoPago?: 'efectivo' | 'tarjeta', tarjetaUltimos4?: string) => {
     if (!user) return;
+    // Antes de crear el pedido, validar stock disponible
+    const insuficientes = items.filter(it => {
+      const prodLatest = products.find(p => p.id === it.producto.id);
+      const available = prodLatest?.stock ?? it.producto.stock ?? 0;
+      return it.cantidad > available;
+    });
+    if (insuficientes.length > 0) {
+      const notification = document.createElement('div');
+      notification.style.position = 'fixed';
+      notification.style.bottom = '20px';
+      notification.style.right = '20px';
+      notification.style.backgroundColor = '#ffdddd';
+      notification.style.color = '#5D4037';
+      notification.style.padding = '12px 18px';
+      notification.style.borderRadius = '5px';
+      notification.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
+      notification.style.zIndex = '2000';
+      notification.textContent = `Algunos productos no tienen suficiente stock. Revisa tu carrito.`;
+      document.body.appendChild(notification);
+      setTimeout(() => {
+        notification.style.opacity = '0';
+        setTimeout(() => document.body.removeChild(notification), 400);
+      }, 2200);
+      return;
+    }
 
     // Crear el pedido
     const newPedido = {
@@ -91,6 +121,19 @@ const Cart: React.FC = () => {
     
     // Limpiar el carrito después de 2 segundos y redirigir al perfil
     setTimeout(() => {
+      // Reducir stock de los productos comprados
+      try {
+        items.forEach(item => {
+          const prodLatest = products.find(p => p.id === item.producto.id);
+          const currentStock = prodLatest?.stock ?? item.producto.stock ?? 0;
+          const newStock = Math.max(0, currentStock - item.cantidad);
+          updateProduct(item.producto.id, { stock: newStock });
+        });
+      } catch (e) {
+        // si algo falla, no bloqueamos el flujo de compra; la persistencia en products puede fallar si providers cambian
+        console.error('Error actualizando stock:', e);
+      }
+
       clearCart();
       setShowSuccessModal(false);
       navigate('/profile');

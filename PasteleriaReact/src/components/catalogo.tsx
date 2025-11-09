@@ -8,7 +8,7 @@ import { useProducts } from '../context/ProductsContext';
 
 // Componente para una tarjeta de producto
 const TarjetaProducto: React.FC<{ producto: Producto; onImageClick?: (p: Producto) => void }> = ({ producto, onImageClick }) => {
-  const { addItem } = useCart();
+  const { addItem, items: cartItems } = useCart();
   // Resuelve la src de la imagen: acepta dataURL, rutas absolutas o nombres de archivo en /images/productos
   const resolveImageSrc = (imagen?: string, codigo?: string) => {
     if (!imagen && !codigo) return '/images/productos/placeholder.jpg';
@@ -29,6 +29,29 @@ const TarjetaProducto: React.FC<{ producto: Producto; onImageClick?: (p: Product
   const CHAR_LIMIT = 200;
 
   const handleComprar = () => {
+    const existing = cartItems.find(i => i.producto.id === producto.id);
+    const existingQty = existing ? existing.cantidad : 0;
+    const available = producto.stock ?? 0;
+    if (existingQty + 1 > available) {
+      const notification = document.createElement('div');
+      notification.style.position = 'fixed';
+      notification.style.bottom = '20px';
+      notification.style.right = '20px';
+      notification.style.backgroundColor = '#ffdddd';
+      notification.style.color = '#5D4037';
+      notification.style.padding = '12px 18px';
+      notification.style.borderRadius = '5px';
+      notification.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
+      notification.style.zIndex = '1000';
+      notification.textContent = `No hay suficiente stock de ${producto.nombre}.`;
+      document.body.appendChild(notification);
+      setTimeout(() => {
+        notification.style.opacity = '0';
+        setTimeout(() => document.body.removeChild(notification), 400);
+      }, 1800);
+      return;
+    }
+
     addItem({
       producto: producto,
       cantidad: 1,
@@ -97,11 +120,21 @@ const TarjetaProducto: React.FC<{ producto: Producto; onImageClick?: (p: Product
           </p>
           <div className="d-flex justify-content-between align-items-center mt-auto mb-3">
             <p className="fw-bold fs-5 mb-0">${producto.precio.toLocaleString('es-CL')} CLP</p>
-            {producto.esPersonalizable && (
-              <span className="badge" style={{ backgroundColor: '#FFC0CB', color: '#5D4037' }}>
-                Personalizable
-              </span>
-            )}
+            <div className="d-flex flex-column align-items-end">
+              {producto.esPersonalizable && (
+                <span className="badge" style={{ backgroundColor: '#FFC0CB', color: '#5D4037' }}>
+                  Personalizable
+                </span>
+              )}
+              {/* Mostrar stock */}
+              {typeof producto.stock === 'number' && (
+                producto.stock > 0 ? (
+                  <small className="text-muted">Stock: {producto.stock}</small>
+                ) : (
+                  <small className="text-danger">Agotado</small>
+                )
+              )}
+            </div>
           </div>
 
           {/* --- Cambiado: ahora TODOS los productos permiten personalizar inline --- */}
@@ -161,8 +194,10 @@ const TarjetaProducto: React.FC<{ producto: Producto; onImageClick?: (p: Product
             className="btn btn-sm w-100" 
             style={{ backgroundColor: '#FFC0CB', borderColor: '#FFC0CB', color: '#5D4037' }}
             onClick={handleComprar}
+            disabled={(producto.stock ?? 0) <= 0}
+            title={(producto.stock ?? 0) <= 0 ? 'Producto agotado' : 'Comprar'}
           >
-            Comprar
+            {(producto.stock ?? 0) <= 0 ? 'Agotado' : 'Comprar'}
           </button>
         </div>
       </div>

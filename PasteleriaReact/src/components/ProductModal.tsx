@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import type { Producto } from '../data/productos';
 import { useCart } from '../context/CartContext';
+import { useProducts } from '../context/ProductsContext';
 
 interface Props {
   producto?: Producto | null;
@@ -10,6 +11,8 @@ interface Props {
 
 const ProductModal: React.FC<Props> = ({ producto, visible, onClose }) => {
   const { addItem } = useCart();
+  const { items: cartItems } = useCart();
+  const { products } = useProducts();
   const [adding, setAdding] = useState(false);
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -96,6 +99,31 @@ const ProductModal: React.FC<Props> = ({ producto, visible, onClose }) => {
                   if (adding) return;
                   setAdding(true);
                   try {
+                    const existing = cartItems.find(i => i.producto.id === producto.id);
+                    const existingQty = existing ? existing.cantidad : 0;
+                    // get freshest stock from products list if available
+                    const prodLatest = products.find(p => p.id === producto.id) || producto;
+                    const available = prodLatest.stock ?? 0;
+                    if (existingQty + 1 > available) {
+                      const notification = document.createElement('div');
+                      notification.style.position = 'fixed';
+                      notification.style.bottom = '20px';
+                      notification.style.right = '20px';
+                      notification.style.backgroundColor = '#ffdddd';
+                      notification.style.color = '#5D4037';
+                      notification.style.padding = '12px 18px';
+                      notification.style.borderRadius = '5px';
+                      notification.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
+                      notification.style.zIndex = '2000';
+                      notification.textContent = `No hay suficiente stock de ${producto.nombre}.`;
+                      document.body.appendChild(notification);
+                      setTimeout(() => {
+                        notification.style.opacity = '0';
+                        setTimeout(() => document.body.removeChild(notification), 400);
+                      }, 1800);
+                      return;
+                    }
+
                     addItem({ producto, cantidad: 1 });
 
                     // small DOM notification similar to catalog
@@ -121,6 +149,7 @@ const ProductModal: React.FC<Props> = ({ producto, visible, onClose }) => {
                   }
                 }}
                 style={{ backgroundColor: '#FFC0CB', borderColor: '#FFC0CB', color: '#5D4037' }}
+                disabled={(products.find(p => p.id === producto.id)?.stock ?? producto.stock ?? 0) <= 0}
               >
                 {adding ? 'Añadiendo...' : 'Agregar al carrito'}
               </button>
