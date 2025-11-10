@@ -1,9 +1,7 @@
-import React from 'react';
 import { vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { screen, fireEvent } from '@testing-library/react';
+import renderWithProviders from '../utils/renderWithProviders';
 import ProductModal from '../../src/components/ProductModal';
-import { CartProvider } from '../../src/context/CartContext';
-import { UserProvider } from '../../src/context/UserContext';
 
 const sampleProduct = {
   id: 'TEST1',
@@ -20,13 +18,7 @@ const sampleProduct = {
 describe('Modal de producto', () => {
   test('renderiza información del producto y llama a onClose', () => {
     const onClose = vi.fn();
-    render(
-      <UserProvider>
-        <CartProvider>
-          <ProductModal producto={sampleProduct as any} visible={true} onClose={onClose} />
-        </CartProvider>
-      </UserProvider>
-    );
+    renderWithProviders(<ProductModal producto={sampleProduct as any} visible={true} onClose={onClose} />);
     expect(screen.getByText('Producto Test')).toBeInTheDocument();
     // check add to cart button exists
     expect(screen.getByText('Agregar al carrito')).toBeInTheDocument();
