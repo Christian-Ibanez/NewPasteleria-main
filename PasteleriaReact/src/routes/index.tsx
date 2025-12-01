@@ -8,6 +8,7 @@ import Layout from '../components/Layout';
 import Home from '../pages/Home';
 import Profile from '../pages/Profile';
 import Promociones from '../pages/Promociones';
+import SimpleDashboard from '../components/admin/SimpleDashboard';
 
 export const router = createBrowserRouter([
   {
@@ -45,6 +46,10 @@ export const router = createBrowserRouter([
       {
         path: '/profile',
         element: <Profile />,
+      },
+      {
+        path: '/admin/dashboard',
+        element: <SimpleDashboard />,
       },
     ],
   },

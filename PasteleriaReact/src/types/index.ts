@@ -2,16 +2,21 @@ export interface Usuario {
   id: string;
   nombre: string;
   email: string;
-  password?: string;
-  direccion?: string;
-  direccionesEntrega?: string[];
+  rol: 'USER' | 'ADMIN' | 'SYSTEM';
   telefono?: string;
-  historialPedidos?: Pedido[];
-  fechaNacimiento: string;
-  descuentoEspecial?: number;
+  direccion?: string;
+  fechaNacimiento?: string;
+  descuentoEspecial: number;
+  esDuoc: boolean;
   codigoDescuento?: string;
-  esDuoc?: boolean;
-  cumpleanos?: string;
+  direccionesEntrega: string[];
+}
+
+export interface ApiResponse<T> {
+  success: boolean;
+  message: string;
+  data: T | null;
+  error: string | null;
 }
 
 export interface Producto {
@@ -29,21 +34,25 @@ export interface Producto {
 export interface Pedido {
   id: string;
   usuarioId: string;
+  usuarioEmail?: string; // Email del usuario, útil para mostrar en el dashboard admin
   productos: {
     productoId: string;
     cantidad: number;
     precio: number;
     nombre: string;
     imagen: string;
+    personalizacion?: string;
   }[];
+  subtotal: number;
+  descuento: number;
   total: number;
-  // Método de pago usado para el pedido
-  metodoPago?: 'efectivo' | 'tarjeta';
-  // Si se pagó con tarjeta, opcionalmente guardar los últimos 4 dígitos
-  tarjetaUltimos4?: string;
-  estado: 'pendiente' | 'preparacion' | 'enviado' | 'entregado';
-  fechaPedido: Date;
+  estado: 'PENDIENTE' | 'EN_PROCESO' | 'ENTREGADO' | 'CANCELADO' | 'EN_PREPARACION' | 'ENVIADO';
+  fechaPedido: string;
+  fechaEntrega?: string;
+  fechaCancelacion?: string;
   direccionEnvio: string;
+  metodoPago: string;
+  tarjetaUltimos4?: string;
 }
 
 export interface CarritoItem {

@@ -12,16 +12,12 @@ const Login: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const success = login(email, password);
-      if (success) {
-        // Si es un correo admin, redirigir al dashboard
-        if (email.toLowerCase().endsWith('@admin.cl')) {
-          navigate('/admin/dashboard');
-        } else {
-          navigate('/profile');
-        }
+      const result = await login(email, password);
+      if (result.success) {
+        // Redirigir según rol
+        navigate('/profile');
       } else {
-        setError('Email o contraseña incorrectos');
+        setError(result.message || 'Email o contraseña incorrectos');
         setTimeout(() => setError(''), 5000);
       }
     } catch (err) {

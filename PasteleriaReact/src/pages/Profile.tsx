@@ -4,9 +4,8 @@ import { useUser } from '../context/UserContext';
 import { REGIONES_COMUNAS } from '../utils/validations';
 
 const Profile: React.FC = () => {
-  const { user, logout, addDeliveryAddress, changePassword } = useUser();
+  const { user, logout, addDeliveryAddress, changePassword, isAdmin } = useUser();
   const navigate = useNavigate();
-  const canSeeDashboard = (user?.email?.toLowerCase?.() === 'admin@admin.cl' || user?.email?.toLowerCase?.() === 'system@admin.cl');
   
   const [regionInput, setRegionInput] = useState('');
   const [comunaInput, setComunaInput] = useState('');
@@ -110,13 +109,14 @@ const Profile: React.FC = () => {
                 )}
               </div>
 
-              {canSeeDashboard && (
+              {isAdmin() && (
                 <button
-                  className="btn w-100"
+                  className="btn w-100 mb-2"
                   onClick={() => navigate('/admin/dashboard')}
                   style={{ backgroundColor: '#8B4513', borderColor: '#8B4513', color: 'white' }}
                 >
-                  Ir al Dashboard
+                  <i className="bi bi-speedometer2 me-2"></i>
+                  Panel de Administración
                 </button>
               )}
 

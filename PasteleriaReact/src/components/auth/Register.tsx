@@ -67,32 +67,13 @@ const Register: React.FC = () => {
     if (!validateForm()) return;
 
     try {
-      // Registrar el usuario con el UserContext primero
-      const fechaNacimiento = new Date(formData.fechaNacimiento);
-      const hoy = new Date();
-      let edad = hoy.getFullYear() - fechaNacimiento.getFullYear();
-      const mes = hoy.getMonth() - fechaNacimiento.getMonth();
-      if (mes < 0 || (mes === 0 && hoy.getDate() < fechaNacimiento.getDate())) edad--;
-
-      const esDuoc = formData.email.toLowerCase().endsWith('@duocuc.cl');
-      const descuentoEdad = edad >= 50 ? 50 : 0;
-      const descuentoCodigo = formData.codigoDescuento === 'FELICES50' ? 10 : 0;
-      const cumpleanos = !!formData.fechaNacimiento;
-
       const userUpdate = {
         nombre: formData.nombre,
         direccion: `${formData.calle} ${formData.numero}, ${comuna}, ${region}`,
         telefono: formData.telefono,
-        direccionesEntrega: [`${formData.calle} ${formData.numero}, ${comuna}, ${region}`],
-        historialPedidos: [],
-        fechaNacimiento: formData.fechaNacimiento,
-        descuentoEspecial: Math.max(descuentoEdad, descuentoCodigo),
-        codigoDescuento: formData.codigoDescuento,
-        esDuoc,
-        cumpleanos
       };
 
-      const result = register(formData.email, formData.password, userUpdate);
+      const result = await register(formData.email, formData.password, userUpdate);
       
       if (!result.success) {
         setError(result.message || 'Error al registrar usuario');
@@ -100,13 +81,8 @@ const Register: React.FC = () => {
         return;
       }
 
-      // Mensajes de beneficios y redirección
-      const beneficios =
-        (esDuoc ? '¡Felicitaciones! Como estudiante DUOC, recibirás una torta gratis en tu cumpleaños. ' : '') +
-        (Math.max(descuentoEdad, descuentoCodigo) > 0 ? `Se ha aplicado un descuento especial del ${Math.max(descuentoEdad, descuentoCodigo)}% a tu cuenta. ` : '');
-
-      setMessage(beneficios || 'Registro exitoso');
-      setTimeout(() => navigate('/login'), 1500);
+      setMessage('Registro exitoso. Redirigiendo...');
+      setTimeout(() => navigate('/profile'), 1500);
     } catch (err) {
       if (err instanceof Error) setError(`Error al registrar usuario: ${err.message}`);
       else setError('Ocurrió un error inesperado durante el registro.');

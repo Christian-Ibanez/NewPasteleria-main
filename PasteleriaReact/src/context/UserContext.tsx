@@ -1,190 +1,156 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-
-type Role = 'user' | 'admin' | 'system';
-
-type User = {
-  email: string;
-  password: string; // Nota: para demo queda en texto plano; en producción usar hash
-  role: Role;
-  immutable?: boolean; // si true no puede borrarse
-  nombre?: string;
-  direccion?: string;
-  telefono?: string;
-  direccionesEntrega?: string[];
-  historialPedidos?: any[];
-  fechaNacimiento?: string;
-  descuentoEspecial?: number;
-  codigoDescuento?: string;
-  esDuoc?: boolean;
-  cumpleanos?: boolean;
-};
+import { authService, usuarioService } from '../services/authService';
+import type { Usuario } from '../types';
 
 type UserContextValue = {
-  users: User[];
-  currentUser: User | null;
-  // backward-compatible alias used across components
-  user: User | null;
-  login: (email: string, password: string) => boolean;
-  logout: () => void;
-  // register can accept optional initial user data to store along with credentials
-  register: (email: string, password: string, data?: Partial<User>) => { success: boolean; message?: string };
-  deleteUser: (email: string) => { success: boolean; message?: string };
+  currentUser: Usuario | null;
+  user: Usuario | null;
+  loading: boolean;
+  login: (email: string, password: string) => Promise<{ success: boolean; message?: string }>;
+  logout: () => Promise<void>;
+  register: (email: string, password: string, data?: { nombre?: string; telefono?: string; direccion?: string }) => Promise<{ success: boolean; message?: string }>;
   isAdmin: () => boolean;
-  updateUser: (userData: Partial<User>) => void;
-  adminUpdateUser: (email: string, patch: Partial<User>) => { success: boolean; message?: string };
-  addDeliveryAddress: (address: string) => void;
-  changePassword: (oldPassword: string, newPassword: string) => boolean;
-  addPedido: (pedido: any) => void;
+  updateUser: (userData: Partial<Usuario>) => Promise<void>;
+  addDeliveryAddress: (address: string) => Promise<void>;
+  changePassword: (oldPassword: string, newPassword: string) => Promise<boolean>;
+  refreshUser: () => Promise<void>;
 };
 
 const UserContext = createContext<UserContextValue | undefined>(undefined);
 
-const USERS_KEY = 'np_users_v1';
-const CURRENT_KEY = 'np_current_user_v1';
-
-const seedUsers: User[] = [
-  { email: 'system@admin.cl', password: 'system', role: 'system', immutable: true },
-  { email: 'admin@admin.cl', password: 'admin', role: 'admin' },
-];
-
 export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [users, setUsers] = useState<User[]>(() => {
-    try {
-      const raw = localStorage.getItem(USERS_KEY);
-      if (!raw) {
-        localStorage.setItem(USERS_KEY, JSON.stringify(seedUsers));
-        return seedUsers;
-      }
-      const parsed = JSON.parse(raw) as User[];
-      // Ensure seed users exist (idempotente)
-      const emails = parsed.map(u => u.email.toLowerCase());
-      const toAdd = seedUsers.filter(s => !emails.includes(s.email.toLowerCase()));
-      if (toAdd.length > 0) {
-        const merged = [...parsed, ...toAdd];
-        localStorage.setItem(USERS_KEY, JSON.stringify(merged));
-        return merged;
-      }
-      return parsed;
-    } catch {
-      localStorage.setItem(USERS_KEY, JSON.stringify(seedUsers));
-      return seedUsers;
-    }
-  });
+  const [currentUser, setCurrentUser] = useState<Usuario | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    try {
-      const raw = localStorage.getItem(CURRENT_KEY);
-      return raw ? (JSON.parse(raw) as User) : null;
-    } catch {
-      return null;
-    }
-  });
-
+  // Verificar token al montar
   useEffect(() => {
-    localStorage.setItem(USERS_KEY, JSON.stringify(users));
-  }, [users]);
+    const checkAuth = async () => {
+      const token = localStorage.getItem('authToken');
+      if (token) {
+        try {
+          const response = await authService.verifyToken();
+          if (response.success && response.data) {
+            setCurrentUser(response.data);
+          } else {
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('usuario');
+          }
+        } catch (error) {
+          console.error('Error verificando token:', error);
+          localStorage.removeItem('authToken');
+          localStorage.removeItem('usuario');
+        }
+      }
+      setLoading(false);
+    };
 
-  useEffect(() => {
-    if (currentUser) localStorage.setItem(CURRENT_KEY, JSON.stringify(currentUser));
-    else localStorage.removeItem(CURRENT_KEY);
-  }, [currentUser]);
+    checkAuth();
+  }, []);
 
-  const login = (email: string, password: string) => {
-    const found = users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
-    if (found) {
-      setCurrentUser(found);
-      return true;
+  const login = async (email: string, password: string) => {
+    try {
+      console.log('UserContext: Iniciando login para', email);
+      const response = await authService.login(email, password);
+      console.log('UserContext: Respuesta de authService:', response);
+      
+      if (response.success && response.data) {
+        console.log('UserContext: Login exitoso, usuario:', response.data.usuario);
+        setCurrentUser(response.data.usuario);
+        return { success: true };
+      }
+      console.warn('UserContext: Login falló', response);
+      return { success: false, message: response.message || 'Error al iniciar sesión' };
+    } catch (error: any) {
+      console.error('UserContext: Error en login:', error);
+      return { success: false, message: error.response?.data?.message || error.message || 'Error de conexión' };
     }
-    return false;
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await authService.logout();
+    } catch (error) {
+      console.error('Error en logout:', error);
+    }
     setCurrentUser(null);
   };
 
-  const register = (email: string, password: string, data?: Partial<User>) => {
-    if (users.some(u => u.email.toLowerCase() === email.toLowerCase())) {
-      return { success: false, message: 'El email ya está registrado' };
+  const register = async (email: string, password: string, data?: { nombre?: string; telefono?: string; direccion?: string }) => {
+    try {
+      const response = await authService.register(email, password, data);
+      if (response.success && response.data) {
+        setCurrentUser(response.data.usuario);
+        return { success: true };
+      }
+      return { success: false, message: response.message || 'Error al registrar' };
+    } catch (error: any) {
+      console.error('Error en registro:', error);
+      return { success: false, message: error.response?.data?.message || 'Error de conexión' };
     }
-    const nuevo: User = { email, password, role: 'user', ...data };
-    setUsers(prev => [...prev, nuevo]);
-    return { success: true };
-  };
-
-  const deleteUser = (email: string) => {
-    const target = users.find(u => u.email.toLowerCase() === email.toLowerCase());
-    if (!target) return { success: false, message: 'Usuario no encontrado' };
-    if (target.immutable || target.role === 'system' || target.email.toLowerCase() === 'system@admin.cl') {
-      return { success: false, message: 'Este usuario no puede eliminarse' };
-    }
-    setUsers(prev => prev.filter(u => u.email.toLowerCase() !== email.toLowerCase()));
-    // Si se borró el usuario logueado, cerramos sesión
-    if (currentUser && currentUser.email.toLowerCase() === email.toLowerCase()) {
-      logout();
-    }
-    return { success: true };
   };
 
   const isAdmin = () => {
-    return !!currentUser && (currentUser.role === 'admin' || currentUser.role === 'system' || currentUser.email.toLowerCase().endsWith('@admin.cl'));
+    return !!currentUser && (currentUser.rol === 'ADMIN' || currentUser.rol === 'SYSTEM');
   };
 
-  const updateUser = (userData: Partial<User>) => {
-    if (!currentUser) return;
-    const updatedUser = { ...currentUser, ...userData };
-    setUsers(prev => prev.map(u => 
-      u.email === currentUser.email ? updatedUser : u
-    ));
-    setCurrentUser(updatedUser);
-  };
-
-  // Admin-only: patch any user by email
-  const adminUpdateUser: UserContextValue['adminUpdateUser'] = (email, patch) => {
-    const exists = users.some(u => u.email.toLowerCase() === email.toLowerCase());
-    if (!exists) return { success: false, message: 'Usuario no encontrado' };
-    // Never allow changing system role away from system
-    const isSystem = email.toLowerCase() === 'system@admin.cl';
-    const safePatch = isSystem ? { ...patch, role: 'system' as Role } : patch;
-    setUsers(prev => prev.map(u => u.email.toLowerCase() === email.toLowerCase() ? { ...u, ...safePatch } : u));
-    if (currentUser && currentUser.email.toLowerCase() === email.toLowerCase()) {
-      setCurrentUser(prev => prev ? { ...prev, ...safePatch } : prev);
+  const updateUser = async (userData: Partial<Usuario>) => {
+    try {
+      const response = await usuarioService.updatePerfil(userData);
+      if (response.success && response.data) {
+        setCurrentUser(response.data);
+      }
+    } catch (error) {
+      console.error('Error actualizando usuario:', error);
+      throw error;
     }
-    return { success: true };
   };
 
-  const addDeliveryAddress = (address: string) => {
-    if (!currentUser) return;
-    const direccionesEntrega = [...(currentUser.direccionesEntrega || []), address];
-    updateUser({ direccionesEntrega });
+  const addDeliveryAddress = async (address: string) => {
+    try {
+      const response = await usuarioService.agregarDireccion(address);
+      if (response.success && response.data) {
+        setCurrentUser(response.data);
+      }
+    } catch (error) {
+      console.error('Error agregando dirección:', error);
+      throw error;
+    }
   };
 
-  const changePassword = (oldPassword: string, newPassword: string) => {
-    if (!currentUser || currentUser.password !== oldPassword) return false;
-    updateUser({ password: newPassword });
-    return true;
+  const changePassword = async (oldPassword: string, newPassword: string) => {
+    try {
+      const response = await usuarioService.cambiarPassword(oldPassword, newPassword);
+      return response.success;
+    } catch (error) {
+      console.error('Error cambiando contraseña:', error);
+      return false;
+    }
   };
 
-  const addPedido = (pedido: any) => {
-    if (!currentUser) return;
-    const historialPedidos = [...(currentUser.historialPedidos || []), pedido];
-    updateUser({ historialPedidos });
+  const refreshUser = async () => {
+    try {
+      const response = await usuarioService.getPerfil();
+      if (response.success && response.data) {
+        setCurrentUser(response.data);
+      }
+    } catch (error) {
+      console.error('Error refrescando usuario:', error);
+    }
   };
 
   return (
     <UserContext.Provider value={{ 
-      users, 
       currentUser,
       user: currentUser,
+      loading,
       login, 
       logout, 
       register, 
-      deleteUser, 
       isAdmin,
       updateUser,
-      adminUpdateUser,
       addDeliveryAddress,
       changePassword,
-      addPedido
+      refreshUser
     }}>
       {children}
     </UserContext.Provider>
