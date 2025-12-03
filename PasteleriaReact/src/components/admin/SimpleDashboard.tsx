@@ -3,8 +3,19 @@ import { useNavigate } from 'react-router-dom';
 import { useUser } from '../../context/UserContext';
 
 const SimpleDashboard: React.FC = () => {
-  const { currentUser, logout, isAdmin } = useUser();
+  const { currentUser, logout, isAdmin, loading } = useUser();
   const navigate = useNavigate();
+
+  // Mostrar loading mientras se verifica la autenticación
+  if (loading) {
+    return (
+      <div className="container py-5 text-center">
+        <div className="spinner-border text-secondary" role="status">
+          <span className="visually-hidden">Cargando...</span>
+        </div>
+      </div>
+    );
+  }
 
   if (!isAdmin()) {
     return (

@@ -19,26 +19,53 @@ type UserContextValue = {
 const UserContext = createContext<UserContextValue | undefined>(undefined);
 
 export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState<Usuario | null>(null);
+  // Inicializar currentUser desde localStorage inmediatamente para evitar flicker
+  const [currentUser, setCurrentUser] = useState<Usuario | null>(() => {
+    const usuarioGuardado = localStorage.getItem('usuario');
+    const token = localStorage.getItem('authToken');
+    if (token && usuarioGuardado) {
+      try {
+        return JSON.parse(usuarioGuardado);
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  });
   const [loading, setLoading] = useState(true);
 
   // Verificar token al montar
   useEffect(() => {
     const checkAuth = async () => {
       const token = localStorage.getItem('authToken');
+      
       if (token) {
         try {
+          // Verificar el token con el backend (en segundo plano)
           const response = await authService.verifyToken();
           if (response.success && response.data) {
+            // Actualizar con los datos frescos del backend
             setCurrentUser(response.data);
+            localStorage.setItem('usuario', JSON.stringify(response.data));
           } else {
+            // Si la verificación falla, limpiar la sesión
             localStorage.removeItem('authToken');
             localStorage.removeItem('usuario');
+            setCurrentUser(null);
           }
         } catch (error) {
           console.error('Error verificando token:', error);
-          localStorage.removeItem('authToken');
-          localStorage.removeItem('usuario');
+          // Si hay error de red pero tenemos token y usuario, mantener la sesión
+          // Solo limpiar si es un error de autenticación (401)
+          if (error && typeof error === 'object' && 'response' in error) {
+            const axiosError = error as { response?: { status?: number } };
+            if (axiosError.response?.status === 401) {
+              localStorage.removeItem('authToken');
+              localStorage.removeItem('usuario');
+              setCurrentUser(null);
+            }
+            // Si es error de red (no hay response), mantener el usuario de localStorage
+          }
         }
       }
       setLoading(false);

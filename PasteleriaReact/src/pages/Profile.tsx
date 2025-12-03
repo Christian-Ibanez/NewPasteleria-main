@@ -5,7 +5,7 @@ import { REGIONES_COMUNAS } from '../utils/validations';
 import { pedidosService } from '../services/pedidosService';
 
 const Profile: React.FC = () => {
-  const { user, logout, addDeliveryAddress, changePassword, isAdmin } = useUser();
+  const { user, logout, addDeliveryAddress, changePassword, isAdmin, loading } = useUser();
   const navigate = useNavigate();
   
   const [regionInput, setRegionInput] = useState('');
@@ -21,11 +21,12 @@ const Profile: React.FC = () => {
   const [loadingPedidos, setLoadingPedidos] = useState(false);
 
   // Si no hay usuario autenticado, redirigir al login
+  // Pero esperar a que termine de cargar para no redirigir prematuramente
   useEffect(() => {
-    if (!user) {
+    if (!loading && !user) {
       navigate('/login');
     }
-  }, [user, navigate]);
+  }, [user, loading, navigate]);
 
   // Cargar pedidos del usuario
   useEffect(() => {

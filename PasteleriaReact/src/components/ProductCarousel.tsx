@@ -2,20 +2,70 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import type { Producto } from '../data/productos';
 import { useProducts } from '../context/ProductsContext';
+import { productosService } from '../services/productosService';
 import { resolveImageSrc, handleImageError } from '../utils/imageUtils';
 
 const ProductCarousel: React.FC = () => {
   const [activeIndex, setActiveIndex] = useState(0);
-  const { products } = useProducts();
-  const productos: Producto[] = products.slice(0, 8);
+  const { products: productosLocal } = useProducts();
+  const [productosDB, setProductosDB] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Cargar productos desde la BD
+  useEffect(() => {
+    const loadProductos = async () => {
+      try {
+        setLoading(true);
+        const data = await productosService.listarProductos();
+        
+        if (Array.isArray(data) && data.length > 0) {
+          setProductosDB(data);
+        } else {
+          // Fallback a productos locales si la BD está vacía
+          setProductosDB(productosLocal);
+        }
+      } catch (error) {
+        console.error('Error cargando productos para carrusel:', error);
+        // Fallback a productos locales en caso de error
+        setProductosDB(productosLocal);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadProductos();
+  }, [productosLocal]);
+
+  const productos: Producto[] = productosDB.slice(0, 8);
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setActiveIndex((current) => (current + 1) % (productos.length - 3));
-    }, 3000); // Cambia cada 3 segundos
+    if (productos.length > 0) {
+      const timer = setInterval(() => {
+        setActiveIndex((current) => (current + 1) % Math.max(1, productos.length - 3));
+      }, 3000); // Cambia cada 3 segundos
 
-    return () => clearInterval(timer);
+      return () => clearInterval(timer);
+    }
   }, [productos.length]);
+
+  // Mostrar loading mientras carga
+  if (loading) {
+    return (
+      <div className="container my-5 text-center">
+        <h2 className="text-center mb-4" style={{ fontFamily: 'Pacifico, cursive', color: '#5D4037' }}>
+          Productos Destacados
+        </h2>
+        <div className="spinner-border text-secondary" role="status">
+          <span className="visually-hidden">Cargando productos...</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Si no hay productos, no mostrar nada
+  if (productos.length === 0) {
+    return null;
+  }
 
   return (
     <div className="container my-5">
@@ -26,7 +76,7 @@ const ProductCarousel: React.FC = () => {
       <div className="position-relative">
         <div className="row">
           {productos.slice(activeIndex, activeIndex + 4).map((producto) => (
-            <div key={producto.codigo} className="col-md-3">
+            <div key={producto.id || producto.codigo} className="col-md-3">
               <div 
                 className="card h-100 shadow-sm" 
                 style={{ 
@@ -42,7 +92,7 @@ const ProductCarousel: React.FC = () => {
               >
                 <div style={{ height: '200px', overflow: 'hidden' }}>
                   <img
-                    src={resolveImageSrc(producto.imagen, producto.codigo)}
+                    src={resolveImageSrc(producto.imagen, producto.codigo || producto.id)}
                     className="card-img-top"
                     alt={producto.nombre}
                     onError={handleImageError}
