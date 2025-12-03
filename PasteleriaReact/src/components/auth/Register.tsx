@@ -51,9 +51,17 @@ const Register: React.FC = () => {
     if (!formData.calle) newErrors.calle = 'Debes ingresar una calle';
     if (!formData.numero) newErrors.numero = 'Debes ingresar un número';
 
+    // Validar contraseña
+    if (!formData.password) {
+      newErrors.password = 'Debes ingresar una contraseña';
+    } else if (formData.password.length < 6) {
+      newErrors.password = 'La contraseña debe tener al menos 6 caracteres';
+    }
+    
     // Validar confirmación de contraseña
-    if (!formData.password) newErrors.password = 'Debes ingresar una contraseña';
-    if (formData.password !== formData.confirmPassword) newErrors.confirmPassword = 'Las contraseñas no coinciden';
+    if (formData.password !== formData.confirmPassword) {
+      newErrors.confirmPassword = 'Las contraseñas no coinciden';
+    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -63,6 +71,8 @@ const Register: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(''); // Limpiar errores previos
+    setMessage('');
 
     if (!validateForm()) return;
 
@@ -76,16 +86,68 @@ const Register: React.FC = () => {
       const result = await register(formData.email, formData.password, userUpdate);
       
       if (!result.success) {
-        setError(result.message || 'Error al registrar usuario');
-        setTimeout(() => setError(''), 4000);
+        // Manejar errores específicos del backend
+        const errorMessage = result.message || 'Error al registrar usuario';
+        
+        console.log('Error en registro:', errorMessage); // Debug
+        
+        // Detectar si es un error de email duplicado
+        if (errorMessage.toLowerCase().includes('email') || 
+            errorMessage.toLowerCase().includes('existe') || 
+            errorMessage.toLowerCase().includes('registrado') ||
+            errorMessage.toLowerCase().includes('ya está') ||
+            errorMessage.toLowerCase().includes('duplicate') ||
+            errorMessage.toLowerCase().includes('ya existe')) {
+          setError('El email ya está registrado. Por favor, usa otro email o inicia sesión.');
+        } else {
+          setError(errorMessage);
+        }
+        
+        setTimeout(() => setError(''), 5000);
         return;
       }
 
       setMessage('Registro exitoso. Redirigiendo...');
       setTimeout(() => navigate('/profile'), 1500);
-    } catch (err) {
-      if (err instanceof Error) setError(`Error al registrar usuario: ${err.message}`);
-      else setError('Ocurrió un error inesperado durante el registro.');
+    } catch (err: any) {
+      console.error('Catch error en registro:', err); // Debug
+      
+      // Verificar si es un error de Axios con response
+      if (err.response) {
+        const status = err.response.status;
+        const errorMessage = err.response.data?.message || err.message;
+        
+        console.log('Status:', status, 'Message:', errorMessage); // Debug
+        
+        // Error 409 = Conflict (email duplicado)
+        if (status === 409 || 
+            errorMessage.toLowerCase().includes('email') || 
+            errorMessage.toLowerCase().includes('existe') || 
+            errorMessage.toLowerCase().includes('registrado') ||
+            errorMessage.toLowerCase().includes('ya está') ||
+            errorMessage.toLowerCase().includes('duplicate') ||
+            errorMessage.toLowerCase().includes('ya existe')) {
+          setError('El email ya está registrado. Por favor, usa otro email o inicia sesión.');
+        } else {
+          setError(errorMessage || 'Error al registrar usuario');
+        }
+      } else if (err instanceof Error) {
+        const errorMsg = err.message;
+        
+        // Detectar si es un error de email duplicado
+        if (errorMsg.toLowerCase().includes('email') || 
+            errorMsg.toLowerCase().includes('existe') || 
+            errorMsg.toLowerCase().includes('registrado') ||
+            errorMsg.toLowerCase().includes('ya está') ||
+            errorMsg.toLowerCase().includes('duplicate') ||
+            errorMsg.toLowerCase().includes('ya existe')) {
+          setError('El email ya está registrado. Por favor, usa otro email o inicia sesión.');
+        } else {
+          setError(`Error al registrar usuario: ${errorMsg}`);
+        }
+      } else {
+        setError('Ocurrió un error inesperado durante el registro.');
+      }
       setTimeout(() => setError(''), 5000);
     }
   };

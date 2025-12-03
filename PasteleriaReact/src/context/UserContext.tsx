@@ -112,7 +112,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, message: response.message || 'Error al registrar' };
     } catch (error: any) {
       console.error('Error en registro:', error);
-      return { success: false, message: error.response?.data?.message || 'Error de conexión' };
+      // Extraer el mensaje del error correctamente
+      const errorMessage = error.response?.data?.message || error.message || 'Error de conexión';
+      return { success: false, message: errorMessage };
     }
   };
 
