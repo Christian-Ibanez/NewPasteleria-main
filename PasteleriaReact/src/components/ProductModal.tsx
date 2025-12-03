@@ -25,10 +25,10 @@ const ProductModal: React.FC<Props> = ({ producto, visible, onClose }) => {
   if (!visible || !producto) return null;
 
   const resolveImageSrc = (imagen?: string, codigo?: string) => {
-    if (!imagen && !codigo) return '/images/productos/placeholder.jpg';
+    if (!imagen && !codigo) return '/images/productos/imagenpasteleria.jpg';
     if (imagen && imagen.startsWith('data:')) return imagen;
     if (imagen && (imagen.startsWith('/') || imagen.startsWith('http'))) return imagen;
-    const name = imagen || codigo || 'placeholder.jpg';
+    const name = imagen || codigo || 'imagenpasteleria.jpg';
     return `/images/productos/${name.toLowerCase()}`;
   };
 
@@ -69,10 +69,11 @@ const ProductModal: React.FC<Props> = ({ producto, visible, onClose }) => {
           <img
             src={resolveImageSrc(producto.imagen, producto.codigo)}
             alt={producto.nombre}
+            onError={handleImageError}
             style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
             onError={(e) => {
               const t = e.target as HTMLImageElement;
-              t.src = '/images/productos/placeholder.jpg';
+              t.src = '/images/productos/imagenpasteleria.jpg';
             }}
           />
         </div>

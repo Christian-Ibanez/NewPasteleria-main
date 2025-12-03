@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useUser } from '../../context/UserContext';
 import { useProducts } from '../../context/ProductsContext';
 import { adminService } from '../../services/adminService';
+import { productosService } from '../../services/productosService';
 import type { Usuario, Pedido } from '../../types';
 
 const Dashboard: React.FC = () => {
@@ -96,7 +97,14 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const handleUpdateUserRole = async (userId: string, nuevoRol: 'USER' | 'ADMIN') => {
+  const handleUpdateUserRole = async (userId: string, nuevoRol: 'USER' | 'ADMIN', userEmail?: string) => {
+    // Proteger al superadmin
+    if (userEmail === 'superadmin@pasteleria.cl') {
+      setMessage('No se puede modificar el rol del superadministrador');
+      setTimeout(() => setMessage(''), 3000);
+      return;
+    }
+    
     try {
       const response = await adminService.actualizarUsuario(userId, { rol: nuevoRol });
       if (response.success) {
@@ -131,7 +139,7 @@ const Dashboard: React.FC = () => {
     navigate('/');
   };
 
-  const handleAddProduct = (e: React.FormEvent) => {
+  const handleAddProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     const precio = Number(form.precio);
     const stockVal = Number(form.stock) || 0;
@@ -159,19 +167,58 @@ const Dashboard: React.FC = () => {
       setTimeout(() => setMessage(''), 3000);
       return;
     }
-    addProduct({
-      id: idVal,
-      nombre: form.nombre!,
-      descripcion: form.descripcion!,
-      categoria: form.categoria!,
-      precio: precio,
-      imagen: form.imagen,
-      stock: stockVal,
-      esPersonalizable: !!form.esPersonalizable,
-    });
-    setForm({ id: '', nombre: '', descripcion: '', precio: 0, categoria: '', imagen: '', stock: 0, esPersonalizable: false });
-    setMessage(`Producto agregado — ID: ${idVal} · Precio: $${precio.toLocaleString('es-CL')} · Stock: ${stockVal}`);
-    setTimeout(() => setMessage(''), 4000);
+
+    try {
+      // Preparar datos del producto
+      const datosProducto = {
+        id: idVal,
+        nombre: form.nombre!,
+        descripcion: form.descripcion || undefined,
+        precio: precio,
+        stock: stockVal,
+        categoria: form.categoria || undefined,
+        imagen: form.imagen || undefined,
+        disponible: true,
+      };
+      
+      console.log('📦 Intentando crear producto:', datosProducto);
+      console.log('🔑 Token actual:', localStorage.getItem('authToken')?.substring(0, 20) + '...');
+      
+      // Crear producto en el backend con el formato correcto
+      const nuevoProducto = await productosService.crearProducto(datosProducto);
+
+      console.log('✅ Producto creado en BD:', nuevoProducto);
+
+      // También agregar al contexto local para que se vea inmediatamente
+      addProduct({
+        id: idVal,
+        nombre: form.nombre!,
+        descripcion: form.descripcion!,
+        categoria: form.categoria!,
+        precio: precio,
+        imagen: form.imagen,
+        stock: stockVal,
+        esPersonalizable: !!form.esPersonalizable,
+      });
+
+      setForm({ id: '', nombre: '', descripcion: '', precio: 0, categoria: '', imagen: '', stock: 0, esPersonalizable: false });
+      setMessage(`✅ Producto agregado exitosamente — ID: ${idVal} · Precio: $${precio.toLocaleString('es-CL')} · Stock: ${stockVal}`);
+      setTimeout(() => setMessage(''), 4000);
+    } catch (error: any) {
+      console.error('Error al crear producto:', error);
+      console.error('Respuesta del servidor:', error.response?.data);
+      
+      let errorMsg = 'Error al crear el producto';
+      if (error.response?.data) {
+        // Si el backend devuelve un mensaje específico
+        errorMsg = error.response.data.message || error.response.data.error || JSON.stringify(error.response.data);
+      } else if (error.message) {
+        errorMsg = error.message;
+      }
+      
+      setMessage(`❌ Error: ${errorMsg}`);
+      setTimeout(() => setMessage(''), 8000);
+    }
   };
 
   const totalIngresos = pedidos.reduce((acc, p) => acc + p.total, 0);
@@ -300,6 +347,9 @@ const Dashboard: React.FC = () => {
                   <tbody>
                     {users.map((u) => {
                       const isSystem = u.rol === 'SYSTEM';
+                      const isSuperAdmin = u.email === 'superadmin@pasteleria.cl';
+                      const isProtected = isSystem || isSuperAdmin;
+                      
                       return (
                         <tr key={u.id}>
                           <td>{u.email}</td>
@@ -308,15 +358,21 @@ const Dashboard: React.FC = () => {
                             <span className={`badge ${u.rol === 'ADMIN' || u.rol === 'SYSTEM' ? 'bg-success' : 'bg-secondary'}`}>
                               {u.rol}
                             </span>
+                            {isSuperAdmin && (
+                              <span className="badge bg-danger ms-1">PROTEGIDO</span>
+                            )}
                           </td>
                           <td>
-                            {!isSystem && (
+                            {!isProtected && (
                               <button
                                 className={`btn btn-sm ${u.rol === 'ADMIN' ? 'btn-warning' : 'btn-success'}`}
-                                onClick={() => handleUpdateUserRole(u.id, u.rol === 'ADMIN' ? 'USER' : 'ADMIN')}
+                                onClick={() => handleUpdateUserRole(u.id, u.rol === 'ADMIN' ? 'USER' : 'ADMIN', u.email)}
                               >
                                 {u.rol === 'ADMIN' ? 'Quitar admin' : 'Hacer admin'}
                               </button>
+                            )}
+                            {isProtected && (
+                              <span className="text-muted small">No modificable</span>
                             )}
                           </td>
                         </tr>
@@ -363,6 +419,7 @@ const Dashboard: React.FC = () => {
                           <span className={`badge ${
                             p.estado === 'ENTREGADO' ? 'bg-success' : 
                             p.estado === 'CANCELADO' ? 'bg-danger' : 
+                            p.estado === 'EN_PROCESO' ? 'bg-info' :
                             'bg-warning'
                           }`}>
                             {p.estado}
@@ -375,8 +432,7 @@ const Dashboard: React.FC = () => {
                             onChange={(e) => handleUpdateOrderStatus(p.id, e.target.value)}
                           >
                             <option value="PENDIENTE">Pendiente</option>
-                            <option value="EN_PREPARACION">En Preparación</option>
-                            <option value="ENVIADO">Enviado</option>
+                            <option value="EN_PROCESO">En Proceso</option>
                             <option value="ENTREGADO">Entregado</option>
                             <option value="CANCELADO">Cancelado</option>
                           </select>

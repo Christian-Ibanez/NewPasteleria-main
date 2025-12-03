@@ -2,20 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import type { Producto } from '../data/productos';
 import { useProducts } from '../context/ProductsContext';
+import { resolveImageSrc, handleImageError } from '../utils/imageUtils';
 
 const ProductCarousel: React.FC = () => {
   const [activeIndex, setActiveIndex] = useState(0);
   const { products } = useProducts();
   const productos: Producto[] = products.slice(0, 8);
-
-  // Helper para resolver la ruta de la imagen
-  const resolveImageSrc = (imagen?: string, codigo?: string) => {
-    if (!imagen && !codigo) return '/images/productos/placeholder.jpg';
-    if (imagen?.startsWith('data:')) return imagen; // Si es base64
-    if (imagen?.startsWith('http') || imagen?.startsWith('/')) return imagen; // Si es URL o ruta absoluta
-    const filename = (imagen || codigo || 'placeholder.jpg').toLowerCase();
-    return `/images/productos/${filename}`;
-  };
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -53,6 +45,7 @@ const ProductCarousel: React.FC = () => {
                     src={resolveImageSrc(producto.imagen, producto.codigo)}
                     className="card-img-top"
                     alt={producto.nombre}
+                    onError={handleImageError}
                     style={{
                       objectFit: 'cover',
                       height: '100%',
@@ -60,7 +53,7 @@ const ProductCarousel: React.FC = () => {
                     }}
                     onError={(e) => {
                       const target = e.target as HTMLImageElement;
-                      target.src = '/images/productos/placeholder.jpg';
+                      target.src = '/images/productos/imagenpasteleria.jpg';
                     }}
                   />
                 </div>

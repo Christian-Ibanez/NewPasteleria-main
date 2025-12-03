@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '../context/UserContext';
 import { REGIONES_COMUNAS } from '../utils/validations';
+import { pedidosService } from '../services/pedidosService';
 
 const Profile: React.FC = () => {
   const { user, logout, addDeliveryAddress, changePassword, isAdmin } = useUser();
@@ -16,13 +17,64 @@ const Profile: React.FC = () => {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [expandedPedido, setExpandedPedido] = useState<string | null>(null);
+  const [pedidos, setPedidos] = useState<any[]>([]);
+  const [loadingPedidos, setLoadingPedidos] = useState(false);
 
   // Si no hay usuario autenticado, redirigir al login
-  React.useEffect(() => {
+  useEffect(() => {
     if (!user) {
       navigate('/login');
     }
   }, [user, navigate]);
+
+  // Cargar pedidos del usuario
+  useEffect(() => {
+    const cargarPedidos = async () => {
+      if (!user) return;
+      
+      setLoadingPedidos(true);
+      try {
+        const response = await pedidosService.listarPedidos(undefined, 1, 50);
+        console.log('Respuesta completa de pedidos:', response);
+        
+        // La estructura esperada es: {success: true, data: {total, page, limit, pedidos: []}}
+        let pedidosData = [];
+        if (response?.data?.pedidos && Array.isArray(response.data.pedidos)) {
+          pedidosData = response.data.pedidos;
+        } else if (response?.pedidos && Array.isArray(response.pedidos)) {
+          pedidosData = response.pedidos;
+        } else if (Array.isArray(response?.data)) {
+          pedidosData = response.data;
+        } else if (Array.isArray(response)) {
+          pedidosData = response;
+        }
+        
+        console.log('Pedidos extraídos:', pedidosData);
+        console.log('Cantidad de pedidos:', pedidosData.length);
+        
+        if (pedidosData.length === 0) {
+          console.warn('No hay pedidos en la base de datos para este usuario');
+        }
+        
+        setPedidos(pedidosData);
+      } catch (err: any) {
+        console.error('Error al cargar pedidos:', err);
+        console.error('Status:', err.response?.status);
+        console.error('Detalles del error:', err.response?.data);
+        
+        if (err.response?.status === 401) {
+          setError('Sesión expirada. Por favor, inicia sesión nuevamente.');
+        } else {
+          setError('No se pudieron cargar los pedidos');
+        }
+        setTimeout(() => setError(''), 4000);
+      } finally {
+        setLoadingPedidos(false);
+      }
+    };
+
+    cargarPedidos();
+  }, [user]);
 
   const handleAddAddress = (e: React.FormEvent) => {
     e.preventDefault();
@@ -247,9 +299,16 @@ const Profile: React.FC = () => {
           <div className="card shadow-sm" style={{ backgroundColor: '#FFF5E1' }}>
             <div className="card-body">
               <h4 style={{ fontFamily: 'Pacifico, cursive', color: '#5D4037' }}>Historial de Pedidos</h4>
-              {user.historialPedidos && user.historialPedidos.length > 0 ? (
+              
+              {loadingPedidos ? (
+                <div className="text-center py-4">
+                  <div className="spinner-border" role="status" style={{ color: '#5D4037' }}>
+                    <span className="visually-hidden">Cargando...</span>
+                  </div>
+                </div>
+              ) : pedidos && pedidos.length > 0 ? (
                 <div className="d-flex flex-column gap-2">
-                  {user.historialPedidos.map((pedido) => (
+                  {pedidos.map((pedido) => (
                     <div key={pedido.id}>
                       <div 
                         className="d-flex justify-content-between align-items-center p-3 rounded cursor-pointer" 
@@ -321,9 +380,9 @@ const Profile: React.FC = () => {
                       
                       {expandedPedido === pedido.id && (
                         <div className="p-3 border-top" style={{ backgroundColor: 'white' }}>
-                          {pedido.productos.map((producto: any) => (
+                          {pedido.productos && pedido.productos.map((producto: any) => (
                             <div 
-                              key={producto.productoId} 
+                              key={producto.productoId || producto.id} 
                               className="d-flex justify-content-between align-items-center py-2"
                             >
                               <div>

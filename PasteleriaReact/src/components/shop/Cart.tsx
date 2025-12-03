@@ -3,10 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { useCart } from '../../context/CartContext';
 import { useUser } from '../../context/UserContext';
 import { useProducts } from '../../context/ProductsContext';
+import { pedidosService } from '../../services/pedidosService';
+import { resolveImageSrc, handleImageError } from '../../utils/imageUtils';
 
 const Cart: React.FC = () => {
   const { items, updateQuantity, clearCart } = useCart();
-  const { user, addPedido } = useUser();
+  const { user } = useUser();
   const { products, updateProduct } = useProducts();
   const navigate = useNavigate();
   
@@ -16,6 +18,7 @@ const Cart: React.FC = () => {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [itemToRemove, setItemToRemove] = useState<string | null>(null);
   const [selectedAddress, setSelectedAddress] = useState<string>('');
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const subtotal = items.reduce((sum, item) => 
     sum + (item.producto.precio * item.cantidad), 0
@@ -64,14 +67,20 @@ const Cart: React.FC = () => {
     setShowCheckoutModal(true);
   };
 
-  const handleConfirmPurchase = (metodoPago?: 'efectivo' | 'tarjeta', tarjetaUltimos4?: string) => {
+  const handleConfirmPurchase = async (metodoPago?: 'efectivo' | 'tarjeta', tarjetaUltimos4?: string) => {
     if (!user) return;
+    
+    // Evitar múltiples envíos
+    if (isProcessing) return;
+    setIsProcessing(true);
+    
     // Antes de crear el pedido, validar stock disponible
     const insuficientes = items.filter(it => {
       const prodLatest = products.find(p => p.id === it.producto.id);
       const available = prodLatest?.stock ?? it.producto.stock ?? 0;
       return it.cantidad > available;
     });
+    
     if (insuficientes.length > 0) {
       const notification = document.createElement('div');
       notification.style.position = 'fixed';
@@ -89,55 +98,99 @@ const Cart: React.FC = () => {
         notification.style.opacity = '0';
         setTimeout(() => document.body.removeChild(notification), 400);
       }, 2200);
+      setIsProcessing(false);
       return;
     }
 
-    // Crear el pedido
-    const newPedido = {
-      id: Math.random().toString(36).substring(2, 11),
-      usuarioId: (user as any).id || user.email,
-      productos: items.map(item => ({
-        productoId: item.producto.id,
-        cantidad: item.cantidad,
-        precio: item.producto.precio,
-        nombre: item.producto.nombre,
-        imagen: item.producto.imagen,
-        personalizacion: item.personalizacion // Añadir el mensaje personalizado
-      })),
-      subtotal: subtotal,
-      descuento: calculateDiscount(),
-      total: total,
-      estado: 'pendiente' as const,
-      fechaPedido: new Date(),
-      direccionEnvio: selectedAddress || user.direccion || '',
-      metodoPago: metodoPago || 'efectivo',
-      tarjetaUltimos4: tarjetaUltimos4
-    };
+    try {
+      // Preparar datos para el endpoint de crear pedido
+      const pedidoData = {
+        productos: items.map(item => ({
+          productoId: item.producto.id,
+          cantidad: item.cantidad,
+          personalizacion: item.personalizacion || undefined
+        })),
+        direccionEnvio: selectedAddress || user.direccion || '',
+        metodoPago: metodoPago || 'efectivo',
+        tarjetaUltimos4: tarjetaUltimos4,
+        codigoDescuento: user.codigoDescuento || undefined
+      };
 
-    // Guardar el pedido en el historial del usuario
-    addPedido(newPedido);
-    setShowCheckoutModal(false);
-    setShowSuccessModal(true);
-    
-    // Limpiar el carrito después de 2 segundos y redirigir al perfil
-    setTimeout(() => {
-      // Reducir stock de los productos comprados
-      try {
-        items.forEach(item => {
-          const prodLatest = products.find(p => p.id === item.producto.id);
-          const currentStock = prodLatest?.stock ?? item.producto.stock ?? 0;
-          const newStock = Math.max(0, currentStock - item.cantidad);
-          updateProduct(item.producto.id, { stock: newStock });
-        });
-      } catch (e) {
-        // si algo falla, no bloqueamos el flujo de compra; la persistencia en products puede fallar si providers cambian
-        console.error('Error actualizando stock:', e);
+      // Llamar al servicio para crear el pedido en la BD
+      const response = await pedidosService.crearPedido(pedidoData);
+      
+      console.log('Respuesta del servidor:', response);
+      
+      // Pedido creado exitosamente
+      setShowCheckoutModal(false);
+      setShowSuccessModal(true);
+        
+        // Limpiar el carrito después de 2 segundos y redirigir al perfil
+        setTimeout(() => {
+          // Reducir stock de los productos comprados localmente
+          try {
+            items.forEach(item => {
+              const prodLatest = products.find(p => p.id === item.producto.id);
+              const currentStock = prodLatest?.stock ?? item.producto.stock ?? 0;
+              const newStock = Math.max(0, currentStock - item.cantidad);
+              updateProduct(item.producto.id, { stock: newStock });
+            });
+          } catch (e) {
+            console.error('Error actualizando stock local:', e);
+          }
+
+          clearCart();
+          setShowSuccessModal(false);
+          navigate('/profile');
+        }, 2000);
+    } catch (error: any) {
+      console.error('Error al crear pedido:', error);
+      console.error('Detalles del error:', error.response?.data);
+      
+      // Mostrar notificación de error
+      const notification = document.createElement('div');
+      notification.style.position = 'fixed';
+      notification.style.bottom = '20px';
+      notification.style.right = '20px';
+      notification.style.backgroundColor = '#ffdddd';
+      notification.style.color = '#5D4037';
+      notification.style.padding = '12px 18px';
+      notification.style.borderRadius = '5px';
+      notification.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
+      notification.style.zIndex = '2000';
+      notification.style.maxWidth = '400px';
+      
+      let errorMsg = 'Error al procesar el pedido';
+      
+      // Manejo específico de errores
+      if (error.response?.status === 404) {
+        const details = error.response?.data?.message || '';
+        if (details.includes('Producto') || details.includes('producto')) {
+          errorMsg = '⚠️ Los productos aún no están registrados en el sistema. Por favor, contacta al administrador para que cargue los productos semilla.';
+        } else {
+          errorMsg = 'Recurso no encontrado: ' + details;
+        }
+      } else if (error.response?.status === 400) {
+        errorMsg = error.response?.data?.message || 'Datos inválidos en el pedido';
+      } else if (error.response?.status === 401) {
+        errorMsg = 'Tu sesión ha expirado. Por favor, inicia sesión nuevamente.';
+      } else if (error.response?.data?.message) {
+        errorMsg = error.response.data.message;
+      } else if (error.message) {
+        errorMsg = error.message;
       }
-
-      clearCart();
-      setShowSuccessModal(false);
-      navigate('/profile');
-    }, 2000);
+      
+      notification.textContent = errorMsg;
+      
+      document.body.appendChild(notification);
+      setTimeout(() => {
+        notification.style.opacity = '0';
+        setTimeout(() => document.body.removeChild(notification), 400);
+      }, 5000);
+      
+      setShowCheckoutModal(false);
+      setIsProcessing(false);
+    }
   };
 
   // Payment form state for checkout modal
@@ -194,13 +247,7 @@ const Cart: React.FC = () => {
     }
   };
 
-  // Añade esta función helper dentro del componente Cart
-  const resolveImageSrc = (imagen?: string) => {
-    if (!imagen) return '/images/productos/placeholder.jpg';
-    if (imagen.startsWith('data:')) return imagen; // Si es base64
-    if (imagen.startsWith('http') || imagen.startsWith('/')) return imagen; // Si es URL o ruta absoluta
-    return `/images/productos/${imagen}`; // Si es nombre de archivo
-  };
+
 
   return (
     <div className="container mt-5">
@@ -237,14 +284,11 @@ const Cart: React.FC = () => {
                       <img
                         src={resolveImageSrc(item.producto.imagen)}
                         alt={item.producto.nombre}
+                        onError={handleImageError}
                         style={{
                           width: '100%',
                           height: '100%',
                           objectFit: 'cover'
-                        }}
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.src = '/images/productos/placeholder.jpg';
                         }}
                       />
                     </div>
@@ -449,7 +493,7 @@ const Cart: React.FC = () => {
                       style={{ width: '50px', height: '50px', objectFit: 'cover', marginRight: '15px', borderRadius: '5px' }}
                       onError={(e) => {
                         const target = e.target as HTMLImageElement;
-                        target.src = '/images/productos/placeholder.jpg';
+                        target.src = '/images/productos/imagenpasteleria.jpg';
                       }}
                     />
                     <div>
@@ -591,6 +635,7 @@ const Cart: React.FC = () => {
               <button
                 className="btn"
                 onClick={() => setShowCheckoutModal(false)}
+                disabled={isProcessing}
                 style={{ backgroundColor: '#8B4513', borderColor: '#8B4513', color: 'white' }}
               >
                 Cancelar
@@ -598,9 +643,15 @@ const Cart: React.FC = () => {
               <button
                 className="btn ms-2"
                 onClick={handleConfirmPayment}
-                style={{ backgroundColor: '#FFC0CB', borderColor: '#FFC0CB', color: '#5D4037' }}
+                disabled={isProcessing}
+                style={{ 
+                  backgroundColor: isProcessing ? '#ccc' : '#FFC0CB', 
+                  borderColor: isProcessing ? '#ccc' : '#FFC0CB', 
+                  color: isProcessing ? '#666' : '#5D4037',
+                  cursor: isProcessing ? 'not-allowed' : 'pointer'
+                }}
               >
-                Pagar
+                {isProcessing ? 'Procesando...' : 'Pagar'}
               </button>
             </div>
           </div>

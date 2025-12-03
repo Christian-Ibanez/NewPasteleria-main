@@ -3,20 +3,13 @@ import type { Producto } from '../data/productos';
 import ProductModal from './ProductModal.tsx';
 import { useCart } from '../context/CartContext';
 import { useProducts } from '../context/ProductsContext';
+import { resolveImageSrc, handleImageError } from '../utils/imageUtils';
 // Importamos 'Container', 'Row' y 'Col' de react-bootstrap si lo usas, 
 // o simplemente clases de Bootstrap si no. Usaremos clases simples para este ejemplo.
 
 // Componente para una tarjeta de producto
 const TarjetaProducto: React.FC<{ producto: Producto; onImageClick?: (p: Producto) => void }> = ({ producto, onImageClick }) => {
   const { addItem, items: cartItems } = useCart();
-  // Resuelve la src de la imagen: acepta dataURL, rutas absolutas o nombres de archivo en /images/productos
-  const resolveImageSrc = (imagen?: string, codigo?: string) => {
-    if (!imagen && !codigo) return '/images/productos/placeholder.jpg';
-    if (imagen && imagen.startsWith('data:')) return imagen; // data URL subida desde dashboard
-    if (imagen && (imagen.startsWith('/') || imagen.startsWith('http'))) return imagen; // ruta absoluta o externa
-    const name = imagen || codigo || 'placeholder.jpg';
-    return `/images/productos/${name.toLowerCase()}`;
-  };
   const estiloTarjeta: React.CSSProperties = {
     backgroundColor: '#FFF5E1',
     color: '#5D4037',
@@ -107,7 +100,7 @@ const TarjetaProducto: React.FC<{ producto: Producto; onImageClick?: (p: Product
             onClick={() => onImageClick && onImageClick(producto)}
             onError={(e) => {
               const target = e.target as HTMLImageElement;
-              target.src = '/images/productos/placeholder.jpg';
+              target.src = '/images/productos/imagenpasteleria.jpg';
             }}
           />
         </div>
