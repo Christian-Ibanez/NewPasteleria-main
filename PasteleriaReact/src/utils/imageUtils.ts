@@ -4,6 +4,11 @@
 const PLACEHOLDER_IMAGE = '/images/productos/imagenpasteleria.jpg';
 
 /**
+ * Cache de imágenes que no existen para evitar reintentarlas
+ */
+const failedImages = new Set<string>();
+
+/**
  * Resuelve la ruta de la imagen de un producto
  * @param imagen - Nombre del archivo de imagen, URL completa, o base64
  * @param codigo - Código del producto (opcional, para fallback)
@@ -22,16 +27,30 @@ export const resolveImageSrc = (imagen?: string | null, codigo?: string): string
 
   // Si es una URL completa (http:// o https://)
   if (imagen.startsWith('http://') || imagen.startsWith('https://')) {
+    // Si esta URL ya falló antes, usar placeholder
+    if (failedImages.has(imagen)) {
+      return PLACEHOLDER_IMAGE;
+    }
     return imagen;
   }
 
+  // Construir la ruta de la imagen
+  let imagePath: string;
+  
   // Si es una ruta absoluta que empieza con /
   if (imagen.startsWith('/')) {
-    return imagen;
+    imagePath = imagen;
+  } else {
+    // Si es solo el nombre del archivo, agregarlo a la ruta de productos
+    imagePath = `/images/productos/${imagen}`;
   }
 
-  // Si es solo el nombre del archivo, agregarlo a la ruta de productos
-  return `/images/productos/${imagen}`;
+  // Si esta ruta ya falló antes, usar placeholder directamente
+  if (failedImages.has(imagePath)) {
+    return PLACEHOLDER_IMAGE;
+  }
+
+  return imagePath;
 };
 
 /**
@@ -42,6 +61,11 @@ export const handleImageError = (
   e: React.SyntheticEvent<HTMLImageElement, Event>
 ): void => {
   const target = e.target as HTMLImageElement;
+  
+  // Agregar la URL que falló al cache
+  if (target.src && !target.src.includes('imagenpasteleria.jpg')) {
+    failedImages.add(target.src);
+  }
   
   // Evitar loop infinito - solo reemplazar una vez
   if (!target.dataset.errorHandled) {

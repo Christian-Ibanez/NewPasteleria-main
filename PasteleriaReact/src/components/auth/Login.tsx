@@ -6,24 +6,58 @@ const Login: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const { login } = useUser();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation();
+    
+    if (isLoading) return; // Evitar múltiples envíos
+    
+    setError('');
+    setSuccess('');
+    setIsLoading(true);
+    
     try {
       const result = await login(email, password);
+      console.log('Resultado del login:', result);
+      
       if (result.success) {
-        // Redirigir según rol
-        navigate('/profile');
+        setSuccess('¡Inicio de sesión exitoso! Redirigiendo...');
+        // Esperar un momento para que el usuario vea el mensaje
+        setTimeout(() => {
+          navigate('/profile');
+        }, 1500);
       } else {
-        setError(result.message || 'Email o contraseña incorrectos');
-        setTimeout(() => setError(''), 5000);
+        // El backend ya devolvió un mensaje de error
+        const errorMsg = result.message || 'Email o contraseña incorrectos';
+        console.log('Mostrando error:', errorMsg);
+        setError(errorMsg);
+        setIsLoading(false);
       }
-    } catch (err) {
-      setError('Ocurrió un error inesperado. Por favor, intente nuevamente.');
-      setTimeout(() => setError(''), 5000);
+    } catch (err: any) {
+      console.error('Error capturado en handleSubmit:', err);
+      // Mejorar los mensajes de error según el tipo de error
+      let errorMessage = 'Ocurrió un error inesperado. Por favor, intente nuevamente.';
+      
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        errorMessage = 'Email o contraseña incorrectos';
+      } else if (err.response?.status === 404) {
+        errorMessage = 'No existe una cuenta con este email';
+      } else if (err.response?.data?.message) {
+        errorMessage = err.response.data.message;
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
+      setIsLoading(false);
     }
+    
+    return false; // Asegurar que no se recarga la página
   };
 
   return (
@@ -37,8 +71,9 @@ const Login: React.FC = () => {
               </h2>
               
               {error && <div className="alert alert-danger">{error}</div>}
+              {success && <div className="alert alert-success">{success}</div>}
               
-              <form onSubmit={handleSubmit}>
+              <form onSubmit={handleSubmit} noValidate autoComplete="off">
                 <div className="mb-3">
                   <label htmlFor="email" className="form-label">Email</label>
                   <input
@@ -67,8 +102,9 @@ const Login: React.FC = () => {
                   type="submit"
                   className="btn w-100 mb-3"
                   style={{ backgroundColor: '#FFC0CB', borderColor: '#FFC0CB', color: 'black' }}
+                  disabled={isLoading}
                 >
-                  Iniciar Sesión
+                  {isLoading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
                 </button>
 
                 <div className="text-center mb-3">

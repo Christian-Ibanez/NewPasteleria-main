@@ -1,8 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import type { Producto } from '../data/productos';
 import ProductModal from './ProductModal.tsx';
 import { useCart } from '../context/CartContext';
 import { useProducts } from '../context/ProductsContext';
+import { productosService } from '../services/productosService';
 import { resolveImageSrc, handleImageError } from '../utils/imageUtils';
 // Importamos 'Container', 'Row' y 'Col' de react-bootstrap si lo usas, 
 // o simplemente clases de Bootstrap si no. Usaremos clases simples para este ejemplo.
@@ -98,10 +99,7 @@ const TarjetaProducto: React.FC<{ producto: Producto; onImageClick?: (p: Product
               width: '100%'
             }}
             onClick={() => onImageClick && onImageClick(producto)}
-            onError={(e) => {
-              const target = e.target as HTMLImageElement;
-              target.src = '/images/productos/imagenpasteleria.jpg';
-            }}
+            onError={handleImageError}
           />
         </div>
         <div className="card-body d-flex flex-column">
@@ -201,12 +199,57 @@ const TarjetaProducto: React.FC<{ producto: Producto; onImageClick?: (p: Product
 
 // Componente principal del Catálogo
 const Catalogo: React.FC = () => {
-  const { products: productos } = useProducts();
+  const { products: productosLocal } = useProducts(); // Renombramos para fallback
+  
+  // Estados para productos desde la BD
+  const [productosDB, setProductosDB] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [errorCarga, setErrorCarga] = useState(false);
+  
   const [busqueda, setBusqueda] = useState('');
   const [filtros, setFiltros] = useState<string[]>([]);
   // Estado para el modal de producto
   const [selectedProducto, setSelectedProducto] = useState<Producto | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
+
+  // Cargar productos desde la BD
+  useEffect(() => {
+    loadProductos();
+  }, []);
+
+  const loadProductos = async () => {
+    try {
+      setLoading(true);
+      setErrorCarga(false);
+      const data = await productosService.listarProductos();
+      console.log('Productos cargados desde BD:', data);
+      
+      // Verificar que data sea un array válido
+      if (Array.isArray(data)) {
+        // Si el array está vacío, usar productos locales como fallback
+        if (data.length === 0) {
+          console.warn('La BD no tiene productos, usando productos locales');
+          setErrorCarga(true);
+          setProductosDB(Array.isArray(productosLocal) ? productosLocal : []);
+        } else {
+          setProductosDB(data);
+        }
+      } else {
+        throw new Error('La respuesta no es un array válido');
+      }
+    } catch (error: any) {
+      console.error('Error al cargar productos desde BD:', error);
+      setErrorCarga(true);
+      // Fallback a productos locales en caso de error
+      if (Array.isArray(productosLocal)) {
+        setProductosDB(productosLocal);
+      } else {
+        setProductosDB([]);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Categorías disponibles
   const categorias = [
@@ -219,12 +262,14 @@ const Catalogo: React.FC = () => {
 
   // Filtrar productos basado en búsqueda y categorías seleccionadas
   const productosFiltrados = useMemo(() => {
-    return productos.filter(producto => {
+    if (!Array.isArray(productosDB)) return [];
+    
+    return productosDB.filter(producto => {
       const matchBusqueda = producto.nombre.toLowerCase().includes(busqueda.toLowerCase());
       const matchCategoria = filtros.length === 0 || filtros.includes(producto.categoria);
       return matchBusqueda && matchCategoria;
     });
-  }, [productos, busqueda, filtros]);
+  }, [productosDB, busqueda, filtros]);
 
   // Manejar cambios en filtros
   const handleFiltroChange = (categoria: string) => {
@@ -243,23 +288,41 @@ const Catalogo: React.FC = () => {
         Nuestro Catálogo de Dulzura
       </h1>
       
-      {/* Zona de Búsqueda y Filtros */}
-      <div className="row mb-4">
-        <div className="col-md-6 mb-3">
-          <div className="input-group">
-            <span className="input-group-text" style={{ backgroundColor: '#FFF5E1', border: '1px solid #FFC0CB' }}>
-              <i className="bi bi-search"></i>
-            </span>
-            <input
-              type="text"
-              className="form-control"
-              placeholder="Buscar por nombre..."
-              value={busqueda}
-              onChange={(e) => setBusqueda(e.target.value)}
-              style={{ border: '1px solid #FFC0CB' }}
-            />
-          </div>
+      {/* Mensaje de alerta si hay error cargando de BD */}
+      {errorCarga && (
+        <div className="alert alert-warning text-center" role="alert">
+          <i className="bi bi-exclamation-triangle-fill me-2"></i>
+          No se pudieron cargar los productos desde el servidor. Mostrando productos locales.
         </div>
+      )}
+      
+      {/* Loading Spinner */}
+      {loading ? (
+        <div className="text-center my-5">
+          <div className="spinner-border text-secondary" role="status" style={{ width: '3rem', height: '3rem' }}>
+            <span className="visually-hidden">Cargando productos...</span>
+          </div>
+          <p className="mt-3 text-muted">Cargando productos desde la base de datos...</p>
+        </div>
+      ) : (
+        <>
+          {/* Zona de Búsqueda y Filtros */}
+          <div className="row mb-4">
+            <div className="col-md-6 mb-3">
+              <div className="input-group">
+                <span className="input-group-text" style={{ backgroundColor: '#FFF5E1', border: '1px solid #FFC0CB' }}>
+                  <i className="bi bi-search"></i>
+                </span>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Buscar por nombre..."
+                  value={busqueda}
+                  onChange={(e) => setBusqueda(e.target.value)}
+                  style={{ border: '1px solid #FFC0CB' }}
+                />
+              </div>
+            </div>
         <div className="col-md-6">
           <div className="d-flex flex-wrap gap-2">
             {categorias.map(({ id, label }) => (
@@ -285,16 +348,23 @@ const Catalogo: React.FC = () => {
 
       {/* Listado de Productos (Grid de Bootstrap) */}
       <div className="row">
-        {productosFiltrados.map((producto) => (
-          <TarjetaProducto
-            key={producto.codigo}
-            producto={producto}
-            onImageClick={(p) => {
-              setSelectedProducto(p);
-              setModalVisible(true);
-            }}
-          />
-        ))}
+        {productosFiltrados.length === 0 ? (
+          <div className="col-12 text-center my-5">
+            <i className="bi bi-inbox" style={{ fontSize: '4rem', color: '#FFC0CB' }}></i>
+            <p className="mt-3 text-muted">No se encontraron productos que coincidan con tu búsqueda.</p>
+          </div>
+        ) : (
+          productosFiltrados.map((producto) => (
+            <TarjetaProducto
+              key={producto.id || producto.codigo}
+              producto={producto}
+              onImageClick={(p) => {
+                setSelectedProducto(p);
+                setModalVisible(true);
+              }}
+            />
+          ))
+        )}
       </div>
 
       {/* Modal de producto */}
@@ -306,6 +376,8 @@ const Catalogo: React.FC = () => {
           setSelectedProducto(null);
         }}
       />
+        </>
+      )}
     </div>
   );
 };

@@ -31,10 +31,18 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     // Si el token expiró (401), limpiar y redirigir al login
+    // PERO solo si NO estamos en las rutas de autenticación
     if (error.response?.status === 401) {
-      localStorage.removeItem('authToken');
-      localStorage.removeItem('usuario');
-      window.location.href = '/login';
+      const currentPath = window.location.pathname;
+      const isAuthRoute = currentPath === '/login' || currentPath === '/register';
+      
+      // Si no estamos en una ruta de autenticación, es que el token expiró
+      if (!isAuthRoute) {
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('usuario');
+        window.location.href = '/login';
+      }
+      // Si estamos en login/register, solo rechazar el error sin redirigir
     }
     return Promise.reject(error);
   }

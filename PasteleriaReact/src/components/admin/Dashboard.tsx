@@ -16,10 +16,20 @@ const Dashboard: React.FC = () => {
   // Estados para datos del backend
   const [users, setUsers] = useState<Usuario[]>([]);
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
+  const [productosBackend, setProductosBackend] = useState<any[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [loadingPedidos, setLoadingPedidos] = useState(false);
+  const [loadingProductos, setLoadingProductos] = useState(false);
 
-  // Form para agregar productos
+  // Estado para modal de confirmación de eliminación
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [productToDelete, setProductToDelete] = useState<{ id: string; nombre: string } | null>(null);
+
+  // Estado para edición de productos
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
+
+  // Form para agregar/editar productos
   const [form, setForm] = useState<{ 
     id: string; 
     nombre: string; 
@@ -56,6 +66,13 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     if (activeTab === 'orders' && pedidos.length === 0) {
       loadPedidos();
+    }
+  }, [activeTab]);
+
+  // Cargar productos del backend
+  useEffect(() => {
+    if (activeTab === 'products') {
+      loadProductos();
     }
   }, [activeTab]);
 
@@ -97,6 +114,34 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  const loadProductos = async () => {
+    setLoadingProductos(true);
+    try {
+      const response = await productosService.listarProductos();
+      console.log('Respuesta de productos:', response);
+      
+      if (response.success && response.data) {
+        const productosArray = Array.isArray(response.data) ? response.data : response.data.productos || [];
+        setProductosBackend(productosArray);
+        console.log('Productos cargados desde BD:', productosArray.length);
+      } else if (Array.isArray(response)) {
+        setProductosBackend(response);
+      }
+    } catch (error: any) {
+      console.error('Error cargando productos:', error);
+      console.error('Detalles del error:', error.response?.data);
+      
+      // Si el backend falla, usar productos del contexto local como fallback
+      console.warn('Usando productos del contexto local como fallback');
+      setProductosBackend(products);
+      
+      setMessage('⚠️ No se pudieron cargar productos desde el servidor. El backend necesita implementar GET /productos');
+      setTimeout(() => setMessage(''), 5000);
+    } finally {
+      setLoadingProductos(false);
+    }
+  };
+
   const handleUpdateUserRole = async (userId: string, nuevoRol: 'USER' | 'ADMIN', userEmail?: string) => {
     // Proteger al superadmin
     if (userEmail === 'superadmin@pasteleria.cl') {
@@ -134,6 +179,72 @@ const Dashboard: React.FC = () => {
     setTimeout(() => setMessage(''), 3000);
   };
 
+  const handleDeleteClick = (product: { id: string; nombre: string }) => {
+    setProductToDelete(product);
+    setShowDeleteModal(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (productToDelete) {
+      try {
+        await productosService.eliminarProducto(productToDelete.id);
+        setMessage('✅ Producto eliminado correctamente de la base de datos');
+        
+        // Recargar la lista de productos desde el backend
+        loadProductos();
+      } catch (error: any) {
+        console.error('Error eliminando producto:', error);
+        console.error('Respuesta del backend:', error.response?.data);
+        
+        // Si el backend falla, eliminar del contexto local como fallback
+        deleteProduct(productToDelete.id);
+        
+        // Actualizar la lista local
+        setProductosBackend(prev => prev.filter(p => p.id !== productToDelete.id));
+        
+        let errorMsg = 'Error al eliminar del servidor';
+        if (error.response?.status === 500) {
+          errorMsg = '⚠️ Error del servidor al eliminar. Eliminado localmente. El backend necesita revisar el endpoint DELETE /admin/productos/{id}';
+        } else if (error.response?.data?.message) {
+          errorMsg = error.response.data.message;
+        }
+        
+        setMessage(errorMsg);
+      }
+      setTimeout(() => setMessage(''), 5000);
+    }
+    setShowDeleteModal(false);
+    setProductToDelete(null);
+  };
+
+  const handleCancelDelete = () => {
+    setShowDeleteModal(false);
+    setProductToDelete(null);
+  };
+
+  const handleEditClick = (product: any) => {
+    setIsEditMode(true);
+    setEditingProductId(product.id);
+    setForm({
+      id: product.id,
+      nombre: product.nombre,
+      descripcion: product.descripcion || '',
+      precio: product.precio,
+      categoria: product.categoria || '',
+      imagen: product.imagen || '',
+      stock: product.stock || 0,
+      esPersonalizable: product.esPersonalizable || false,
+    });
+    // Scroll al formulario
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditMode(false);
+    setEditingProductId(null);
+    setForm({ id: '', nombre: '', descripcion: '', precio: 0, categoria: '', imagen: '', stock: 0, esPersonalizable: false });
+  };
+
   const handleLogout = () => {
     logout();
     navigate('/');
@@ -147,16 +258,20 @@ const Dashboard: React.FC = () => {
     const idVal = idValRaw.toUpperCase();
     const idRegex = /^[A-Za-z0-9]{4,6}$/;
 
-    if (!idVal) {
-      setMessage('Ingrese una ID de producto (4–6 caracteres alfanuméricos).');
-      setTimeout(() => setMessage(''), 3000);
-      return;
+    // Validaciones
+    if (!isEditMode) {
+      if (!idVal) {
+        setMessage('Ingrese una ID de producto (4–6 caracteres alfanuméricos).');
+        setTimeout(() => setMessage(''), 3000);
+        return;
+      }
+      if (!idRegex.test(idVal)) {
+        setMessage('ID inválida. Debe tener entre 4 y 6 caracteres (letras y/o números).');
+        setTimeout(() => setMessage(''), 3000);
+        return;
+      }
     }
-    if (!idRegex.test(idVal)) {
-      setMessage('ID inválida. Debe tener entre 4 y 6 caracteres (letras y/o números).');
-      setTimeout(() => setMessage(''), 3000);
-      return;
-    }
+    
     if (!form.nombre || !form.descripcion || !form.categoria) {
       setMessage('Completa nombre, descripción y categoría');
       setTimeout(() => setMessage(''), 3000);
@@ -169,40 +284,58 @@ const Dashboard: React.FC = () => {
     }
 
     try {
-      // Preparar datos del producto
-      const datosProducto = {
-        id: idVal,
-        nombre: form.nombre!,
-        descripcion: form.descripcion || undefined,
-        precio: precio,
-        stock: stockVal,
-        categoria: form.categoria || undefined,
-        imagen: form.imagen || undefined,
-        disponible: true,
-      };
+      if (isEditMode && editingProductId) {
+        // ACTUALIZAR producto existente
+        const datosActualizacion = {
+          nombre: form.nombre!,
+          descripcion: form.descripcion || undefined,
+          precio: precio,
+          stock: stockVal,
+          categoria: form.categoria || undefined,
+          imagen: form.imagen || undefined,
+          disponible: true,
+        };
+        
+        console.log('📝 Actualizando producto:', editingProductId, datosActualizacion);
+        
+        await productosService.actualizarProducto(editingProductId, datosActualizacion);
+        
+        console.log('✅ Producto actualizado en BD');
+        
+        // Recargar la lista de productos
+        loadProductos();
+        
+        setMessage(`✅ Producto actualizado exitosamente — ${form.nombre}`);
+        setIsEditMode(false);
+        setEditingProductId(null);
+      } else {
+        // CREAR nuevo producto
+        const datosProducto = {
+          id: idVal,
+          nombre: form.nombre!,
+          descripcion: form.descripcion || undefined,
+          precio: precio,
+          stock: stockVal,
+          categoria: form.categoria || undefined,
+          imagen: form.imagen || undefined,
+          disponible: true,
+        };
+        
+        console.log('📦 Intentando crear producto:', datosProducto);
+        console.log('🔑 Token actual:', localStorage.getItem('authToken')?.substring(0, 20) + '...');
+        
+        // Crear producto en el backend con el formato correcto
+        const nuevoProducto = await productosService.crearProducto(datosProducto);
+
+        console.log('✅ Producto creado en BD:', nuevoProducto);
+
+        // Recargar la lista de productos desde el backend
+        loadProductos();
+
+        setMessage(`✅ Producto agregado exitosamente — ID: ${idVal} · Precio: $${precio.toLocaleString('es-CL')} · Stock: ${stockVal}`);
+      }
       
-      console.log('📦 Intentando crear producto:', datosProducto);
-      console.log('🔑 Token actual:', localStorage.getItem('authToken')?.substring(0, 20) + '...');
-      
-      // Crear producto en el backend con el formato correcto
-      const nuevoProducto = await productosService.crearProducto(datosProducto);
-
-      console.log('✅ Producto creado en BD:', nuevoProducto);
-
-      // También agregar al contexto local para que se vea inmediatamente
-      addProduct({
-        id: idVal,
-        nombre: form.nombre!,
-        descripcion: form.descripcion!,
-        categoria: form.categoria!,
-        precio: precio,
-        imagen: form.imagen,
-        stock: stockVal,
-        esPersonalizable: !!form.esPersonalizable,
-      });
-
       setForm({ id: '', nombre: '', descripcion: '', precio: 0, categoria: '', imagen: '', stock: 0, esPersonalizable: false });
-      setMessage(`✅ Producto agregado exitosamente — ID: ${idVal} · Precio: $${precio.toLocaleString('es-CL')} · Stock: ${stockVal}`);
       setTimeout(() => setMessage(''), 4000);
     } catch (error: any) {
       console.error('Error al crear producto:', error);
@@ -451,10 +584,19 @@ const Dashboard: React.FC = () => {
           <div>
             <h4 className="mb-3">Gestión de Productos</h4>
             
-            {/* Form para agregar producto */}
+            {/* Form para agregar/editar producto */}
             <div className="card mb-4">
-              <div className="card-header">
-                <h5>Agregar Nuevo Producto</h5>
+              <div className="card-header d-flex justify-content-between align-items-center">
+                <h5>{isEditMode ? 'Editar Producto' : 'Agregar Nuevo Producto'}</h5>
+                {isEditMode && (
+                  <button 
+                    type="button" 
+                    className="btn btn-sm btn-secondary"
+                    onClick={handleCancelEdit}
+                  >
+                    Cancelar Edición
+                  </button>
+                )}
               </div>
               <div className="card-body">
                 <form onSubmit={handleAddProduct}>
@@ -467,7 +609,9 @@ const Dashboard: React.FC = () => {
                         value={form.id}
                         onChange={(e) => setForm({ ...form, id: e.target.value })}
                         required
+                        disabled={isEditMode}
                       />
+                      {isEditMode && <small className="text-muted">El ID no se puede modificar</small>}
                     </div>
                     <div className="col-md-6 mb-3">
                       <label className="form-label">Nombre</label>
@@ -539,55 +683,123 @@ const Dashboard: React.FC = () => {
                     </div>
                   </div>
                   <button type="submit" className="btn btn-primary">
-                    Agregar Producto
+                    {isEditMode ? 'Actualizar Producto' : 'Agregar Producto'}
                   </button>
                 </form>
               </div>
             </div>
 
             {/* Lista de productos */}
-            <div className="table-responsive">
-              <table className="table table-hover">
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>Nombre</th>
-                    <th>Categoría</th>
-                    <th>Precio</th>
-                    <th>Stock</th>
-                    <th>Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {products.map((p) => (
-                    <tr key={p.id}>
-                      <td>{p.id}</td>
-                      <td>{p.nombre}</td>
-                      <td>{p.categoria}</td>
-                      <td>${p.precio.toLocaleString('es-CL')}</td>
-                      <td>{p.stock || 0}</td>
-                      <td>
-                        <button
-                          className="btn btn-sm btn-danger"
-                          onClick={() => {
-                            if (confirm(`¿Eliminar ${p.nombre}?`)) {
-                              deleteProduct(p.id);
-                              setMessage('Producto eliminado');
-                              setTimeout(() => setMessage(''), 3000);
-                            }
-                          }}
-                        >
-                          Eliminar
-                        </button>
-                      </td>
+            {loadingProductos ? (
+              <div className="text-center py-4">
+                <div className="spinner-border" role="status" style={{ color: '#5D4037' }}>
+                  <span className="visually-hidden">Cargando productos...</span>
+                </div>
+              </div>
+            ) : (
+              <div className="table-responsive">
+                <table className="table table-hover">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Nombre</th>
+                      <th>Categoría</th>
+                      <th>Precio</th>
+                      <th>Stock</th>
+                      <th>Acciones</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {productosBackend.length > 0 ? (
+                      productosBackend.map((p) => (
+                        <tr key={p.id}>
+                          <td>{p.id}</td>
+                          <td>{p.nombre}</td>
+                          <td>{p.categoria || '-'}</td>
+                          <td>${p.precio?.toLocaleString('es-CL') || 0}</td>
+                          <td>{p.stock || 0}</td>
+                          <td>
+                            <button
+                              className="btn btn-sm btn-warning me-2"
+                              onClick={() => handleEditClick(p)}
+                            >
+                              Editar
+                            </button>
+                            <button
+                              className="btn btn-sm btn-danger"
+                              onClick={() => handleDeleteClick({ id: p.id, nombre: p.nombre })}
+                            >
+                              Eliminar
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={6} className="text-center text-muted">
+                          No hay productos disponibles
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </div>
+
+      {/* Modal de confirmación de eliminación */}
+      {showDeleteModal && (
+        <div 
+          className="modal show d-block" 
+          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+          onClick={handleCancelDelete}
+        >
+          <div 
+            className="modal-dialog modal-dialog-centered"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-content" style={{ backgroundColor: '#FFF5E1' }}>
+              <div className="modal-header" style={{ borderBottom: '2px solid #FFC0CB' }}>
+                <h5 className="modal-title" style={{ fontFamily: 'Pacifico, cursive', color: '#5D4037' }}>
+                  Confirmar Eliminación
+                </h5>
+                <button 
+                  type="button" 
+                  className="btn-close" 
+                  onClick={handleCancelDelete}
+                ></button>
+              </div>
+              <div className="modal-body">
+                <p>¿Estás seguro de que deseas eliminar el producto?</p>
+                {productToDelete && (
+                  <p className="fw-bold" style={{ color: '#5D4037' }}>
+                    {productToDelete.nombre}
+                  </p>
+                )}
+                <p className="text-muted small">Esta acción no se puede deshacer.</p>
+              </div>
+              <div className="modal-footer" style={{ borderTop: '2px solid #FFC0CB' }}>
+                <button 
+                  type="button" 
+                  className="btn btn-secondary" 
+                  onClick={handleCancelDelete}
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="button" 
+                  className="btn btn-danger" 
+                  onClick={handleConfirmDelete}
+                >
+                  Eliminar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

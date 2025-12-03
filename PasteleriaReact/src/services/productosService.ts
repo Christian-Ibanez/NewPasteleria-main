@@ -16,7 +16,25 @@ export const productosService = {
     params.append('limit', limit.toString());
 
     const response = await api.get(`/productos?${params.toString()}`);
-    return response.data;
+    
+    // El backend devuelve {success, message, data: {productos: []}, error}
+    if (response.data && response.data.data) {
+      // Primero intentar con data.productos
+      if (Array.isArray(response.data.data.productos)) {
+        return response.data.data.productos;
+      }
+      // Si data.content existe, es una respuesta paginada
+      if (Array.isArray(response.data.data.content)) {
+        return response.data.data.content;
+      }
+      // Si data es directamente un array
+      if (Array.isArray(response.data.data)) {
+        return response.data.data;
+      }
+    }
+    
+    // Fallback: retornar array vacío si no se encuentra la estructura esperada
+    return [];
   },
 
   // Obtener producto por ID
@@ -66,19 +84,19 @@ export const productosService = {
 
   // Actualizar producto (Admin)
   actualizarProducto: async (productoId: string, data: Partial<Producto>) => {
-    const response = await api.put(`/productos/${productoId}`, data);
+    const response = await api.put(`/admin/productos/${productoId}`, data);
     return response.data;
   },
 
   // Eliminar producto (Admin)
   eliminarProducto: async (productoId: string) => {
-    const response = await api.delete(`/productos/${productoId}`);
+    const response = await api.delete(`/admin/productos/${productoId}`);
     return response.data;
   },
 
   // Actualizar stock (Admin)
   actualizarStock: async (productoId: string, nuevoStock: number) => {
-    const response = await api.patch(`/productos/${productoId}/stock`, {
+    const response = await api.patch(`/admin/productos/${productoId}/stock`, {
       nuevoStock,
     });
     return response.data;
