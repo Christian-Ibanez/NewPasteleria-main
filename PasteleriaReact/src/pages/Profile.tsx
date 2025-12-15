@@ -19,6 +19,8 @@ const Profile: React.FC = () => {
   const [expandedPedido, setExpandedPedido] = useState<string | null>(null);
   const [pedidos, setPedidos] = useState<any[]>([]);
   const [loadingPedidos, setLoadingPedidos] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   // Si no hay usuario autenticado, redirigir al login
   // Pero esperar a que termine de cargar para no redirigir prematuramente
@@ -110,9 +112,27 @@ const Profile: React.FC = () => {
     }
   };
 
-  const handleLogout = () => {
-    logout();
-    navigate('/');
+  const handleLogoutClick = () => {
+    setIsLoggingOut(false); // Resetear el estado antes de abrir el modal
+    setShowLogoutModal(true);
+  };
+
+  const handleConfirmLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      await logout();
+      setShowLogoutModal(false);
+      navigate('/');
+    } catch (error) {
+      console.error('Error en logout:', error);
+      setIsLoggingOut(false);
+      setShowLogoutModal(false);
+    }
+  };
+
+  const handleCancelLogout = () => {
+    setShowLogoutModal(false);
   };
 
   if (!user) return null;
@@ -175,7 +195,7 @@ const Profile: React.FC = () => {
 
               <button 
                 className="btn w-100 mt-3"
-                onClick={handleLogout}
+                onClick={handleLogoutClick}
                 style={{ backgroundColor: '#FFC0CB', borderColor: '#FFC0CB', color: '#5D4037' }}
               >
                 Cerrar Sesión
@@ -410,6 +430,67 @@ const Profile: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Modal de confirmación de logout */}
+      {showLogoutModal && (
+        <div 
+          className="modal show d-block" 
+          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+          onClick={handleCancelLogout}
+        >
+          <div 
+            className="modal-dialog modal-dialog-centered"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-content">
+              <div className="modal-header" style={{ borderBottom: '2px solid #FFC0CB' }}>
+                <h5 className="modal-title" style={{ color: '#5D4037' }}>
+                  Cerrar Sesión
+                </h5>
+                <button 
+                  type="button" 
+                  className="btn-close" 
+                  onClick={handleCancelLogout}
+                  disabled={isLoggingOut}
+                ></button>
+              </div>
+              <div className="modal-body">
+                {isLoggingOut ? (
+                  <div className="text-center py-3">
+                    <div className="spinner-border text-primary mb-3" role="status">
+                      <span className="visually-hidden">Cerrando sesión...</span>
+                    </div>
+                    <p className="text-muted">Cerrando sesión...</p>
+                  </div>
+                ) : (
+                  <>
+                    <p>¿Estás seguro de que deseas cerrar sesión?</p>
+                    <p className="text-muted small">Deberás iniciar sesión nuevamente para acceder a tu perfil.</p>
+                  </>
+                )}
+              </div>
+              {!isLoggingOut && (
+                <div className="modal-footer" style={{ borderTop: '2px solid #FFC0CB' }}>
+                  <button 
+                    type="button" 
+                    className="btn btn-secondary" 
+                    onClick={handleCancelLogout}
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    type="button" 
+                    className="btn btn-danger" 
+                    onClick={handleConfirmLogout}
+                  >
+                    Cerrar Sesión
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

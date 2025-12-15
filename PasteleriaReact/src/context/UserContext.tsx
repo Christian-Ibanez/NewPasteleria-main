@@ -74,6 +74,36 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     checkAuth();
   }, []);
 
+  // Sincronizar logout entre pestañas
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      // Detectar cuando se elimina el token en otra pestaña
+      if (e.key === 'authToken' && e.newValue === null) {
+        console.log('Token eliminado en otra pestaña, cerrando sesión...');
+        setCurrentUser(null);
+      }
+      // Detectar cuando se agrega un token en otra pestaña (login en otra pestaña)
+      if (e.key === 'authToken' && e.newValue !== null) {
+        console.log('Token agregado en otra pestaña, actualizando usuario...');
+        const usuarioGuardado = localStorage.getItem('usuario');
+        if (usuarioGuardado) {
+          try {
+            setCurrentUser(JSON.parse(usuarioGuardado));
+          } catch {
+            console.error('Error parseando usuario guardado');
+          }
+        }
+      }
+    };
+
+    // El evento 'storage' se dispara cuando localStorage cambia en OTRA pestaña
+    window.addEventListener('storage', handleStorageChange);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, []);
+
   const login = async (email: string, password: string) => {
     try {
       console.log('UserContext: Iniciando login para', email);

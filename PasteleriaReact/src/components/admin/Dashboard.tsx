@@ -25,6 +25,10 @@ const Dashboard: React.FC = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [productToDelete, setProductToDelete] = useState<{ id: string; nombre: string } | null>(null);
 
+  // Estado para modal de confirmación de logout
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
   // Estado para edición de productos
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
@@ -55,16 +59,21 @@ const Dashboard: React.FC = () => {
     );
   }
 
-  // Cargar usuarios del backend
+  // Cargar todos los datos al montar el componente
   useEffect(() => {
-    if (activeTab === 'users' && users.length === 0) {
+    loadUsers();
+    loadPedidos();
+  }, []);
+
+  // Recargar datos cuando cambias de pestaña (opcional, para refrescar)
+  useEffect(() => {
+    if (activeTab === 'users') {
       loadUsers();
     }
   }, [activeTab]);
 
-  // Cargar pedidos del backend
   useEffect(() => {
-    if (activeTab === 'orders' && pedidos.length === 0) {
+    if (activeTab === 'orders') {
       loadPedidos();
     }
   }, [activeTab]);
@@ -77,6 +86,9 @@ const Dashboard: React.FC = () => {
   }, [activeTab]);
 
   const loadUsers = async () => {
+    // Evitar cargar si ya está cargando
+    if (loadingUsers) return;
+    
     setLoadingUsers(true);
     try {
       const response = await adminService.listarUsuarios(1, 100);
@@ -96,6 +108,9 @@ const Dashboard: React.FC = () => {
   };
 
   const loadPedidos = async () => {
+    // Evitar cargar si ya está cargando
+    if (loadingPedidos) return;
+    
     setLoadingPedidos(true);
     try {
       const response = await adminService.listarPedidos(undefined, 1, 100);
@@ -245,9 +260,28 @@ const Dashboard: React.FC = () => {
     setForm({ id: '', nombre: '', descripcion: '', precio: 0, categoria: '', imagen: '', stock: 0, esPersonalizable: false });
   };
 
-  const handleLogout = () => {
-    logout();
-    navigate('/');
+  const handleLogoutClick = () => {
+    setIsLoggingOut(false); // Resetear el estado antes de abrir el modal
+    setShowLogoutModal(true);
+  };
+
+  const handleConfirmLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      // Pequeño delay para que el usuario vea el loading
+      await new Promise(resolve => setTimeout(resolve, 500));
+      await logout();
+      setShowLogoutModal(false);
+      navigate('/');
+    } catch (error) {
+      console.error('Error en logout:', error);
+      setIsLoggingOut(false);
+      setShowLogoutModal(false);
+    }
+  };
+
+  const handleCancelLogout = () => {
+    setShowLogoutModal(false);
   };
 
   const handleAddProduct = async (e: React.FormEvent) => {
@@ -363,7 +397,7 @@ const Dashboard: React.FC = () => {
           <h1 className="h3 mb-0" style={{ color: '#1f2937' }}>Dashboard Administrativo</h1>
           <div>
             <span className="me-3 text-muted">Sesión: {currentUser?.email}</span>
-            <button className="btn btn-sm btn-outline-secondary" onClick={handleLogout}>Cerrar sesión</button>
+            <button className="btn btn-sm btn-outline-secondary" onClick={handleLogoutClick}>Cerrar sesión</button>
           </div>
         </div>
 
@@ -412,47 +446,58 @@ const Dashboard: React.FC = () => {
         {/* Overview */}
         {activeTab === 'overview' && (
           <div className="row">
-            <div className="col-md-4 mb-3">
-              <div className="card">
-                <div className="card-body">
-                  <h5 className="card-title">Total Usuarios</h5>
-                  <p className="card-text display-6">{users.length}</p>
-                  <button className="btn btn-sm btn-primary" onClick={() => setActiveTab('users')}>
-                    Ver usuarios
-                  </button>
+            {(loadingUsers || loadingPedidos) ? (
+              <div className="col-12 text-center py-5">
+                <div className="spinner-border text-primary" role="status">
+                  <span className="visually-hidden">Cargando datos...</span>
                 </div>
+                <p className="mt-3 text-muted">Cargando estadísticas del dashboard...</p>
               </div>
-            </div>
-            <div className="col-md-4 mb-3">
-              <div className="card">
-                <div className="card-body">
-                  <h5 className="card-title">Total Pedidos</h5>
-                  <p className="card-text display-6">{pedidos.length}</p>
-                  <button className="btn btn-sm btn-primary" onClick={() => setActiveTab('orders')}>
-                    Ver pedidos
-                  </button>
+            ) : (
+              <>
+                <div className="col-md-3 mb-3">
+                  <div className="card">
+                    <div className="card-body">
+                      <h5 className="card-title">Total Usuarios</h5>
+                      <p className="card-text display-6">{users.length}</p>
+                      <button className="btn btn-sm btn-primary" onClick={() => setActiveTab('users')}>
+                        Ver usuarios
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-            <div className="col-md-4 mb-3">
-              <div className="card">
-                <div className="card-body">
-                  <h5 className="card-title">Total Productos</h5>
-                  <p className="card-text display-6">{products.length}</p>
-                  <button className="btn btn-sm btn-primary" onClick={() => setActiveTab('products')}>
-                    Ver productos
-                  </button>
+                <div className="col-md-3 mb-3">
+                  <div className="card">
+                    <div className="card-body">
+                      <h5 className="card-title">Total Pedidos</h5>
+                      <p className="card-text display-6">{pedidos.length}</p>
+                      <button className="btn btn-sm btn-primary" onClick={() => setActiveTab('orders')}>
+                        Ver pedidos
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-            <div className="col-md-6 mb-3">
-              <div className="card">
-                <div className="card-body">
-                  <h5 className="card-title">Ingresos Totales</h5>
-                  <p className="card-text display-6">${totalIngresos.toLocaleString('es-CL')}</p>
+                <div className="col-md-3 mb-3">
+                  <div className="card">
+                    <div className="card-body">
+                      <h5 className="card-title">Total Productos</h5>
+                      <p className="card-text display-6">{products.length}</p>
+                      <button className="btn btn-sm btn-primary" onClick={() => setActiveTab('products')}>
+                        Ver productos
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
+                <div className="col-md-3 mb-3">
+                  <div className="card">
+                    <div className="card-body">
+                      <h5 className="card-title">Ingresos Totales</h5>
+                      <p className="card-text display-6">${totalIngresos.toLocaleString('es-CL')}</p>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
 
@@ -796,6 +841,67 @@ const Dashboard: React.FC = () => {
                   Eliminar
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de confirmación de logout */}
+      {showLogoutModal && (
+        <div 
+          className="modal show d-block" 
+          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+          onClick={handleCancelLogout}
+        >
+          <div 
+            className="modal-dialog modal-dialog-centered"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-content">
+              <div className="modal-header" style={{ borderBottom: '2px solid #FFC0CB' }}>
+                <h5 className="modal-title" style={{ color: '#5D4037' }}>
+                  Cerrar Sesión
+                </h5>
+                <button 
+                  type="button" 
+                  className="btn-close" 
+                  onClick={handleCancelLogout}
+                  disabled={isLoggingOut}
+                ></button>
+              </div>
+              <div className="modal-body">
+                {isLoggingOut ? (
+                  <div className="text-center py-3">
+                    <div className="spinner-border text-primary mb-3" role="status">
+                      <span className="visually-hidden">Cerrando sesión...</span>
+                    </div>
+                    <p className="text-muted">Cerrando sesión...</p>
+                  </div>
+                ) : (
+                  <>
+                    <p>¿Estás seguro de que deseas cerrar sesión?</p>
+                    <p className="text-muted small">Deberás iniciar sesión nuevamente para acceder al dashboard.</p>
+                  </>
+                )}
+              </div>
+              {!isLoggingOut && (
+                <div className="modal-footer" style={{ borderTop: '2px solid #FFC0CB' }}>
+                  <button 
+                    type="button" 
+                    className="btn btn-secondary" 
+                    onClick={handleCancelLogout}
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    type="button" 
+                    className="btn btn-danger" 
+                    onClick={handleConfirmLogout}
+                  >
+                    Cerrar Sesión
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
